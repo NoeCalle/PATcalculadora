@@ -57,6 +57,14 @@ python -m pytest
 | `malla.py` | Rg (Sverak y Schwarz), n, Ki, Kii, Kh, Km, Ks, LM, Ls, Em, Es y avisos de validez |
 | `diseno.py` | Flujo completo, verificaciones, barrido de conductores y memoria de cálculo |
 
+## Validación
+
+El motor se comparó con un ejemplo resuelto publicado por terceros (subestación de parque eólico de 110 kV, malla rectangular de 43,75 × 65,25 m con 30 varillas). Las **16 magnitudes** coinciden dentro del redondeo de la fuente, incluidas las dos críticas: tensión de malla (878,9 V frente a ~880 V publicados) y tensión de paso (582,8 V frente a ~583 V).
+
+También se comprobó contra los valores tabulados del ejemplo de 70 × 70 m del Anexo B de IEEE 80: Rg = 2,7757 Ω frente a 2,78 Ω de la norma, y las tensiones tolerables coinciden al céntimo con CYMGRD.
+
+Todo está automatizado en `tests/test_validacion_externa.py`. **Lee [docs/VALIDACION.md](docs/VALIDACION.md) antes de citar resultados en un documento**: detalla las fuentes, las diferencias y, sobre todo, lo que todavía **no** está validado (el factor Kii de mallas sin varillas, las constantes de materiales y las ecuaciones de Schwarz).
+
 ## Alcance y límites (léelo antes de citar resultados)
 
 - **El factor de división de corriente Sf es un dato de entrada.** No se calcula a partir de las líneas y cables de guarda (IEEE 80, capítulo 15); usar 1.0 es conservador.
@@ -79,3 +87,7 @@ build_web.py    regenera docs/index.html si cambias el código
 ```
 
 Si modificas algo en `src/tierra/`, ejecuta `python build_web.py` para actualizar la página web.
+
+## Licencia
+
+MIT — ver [LICENSE](LICENSE). Puedes usarla, modificarla y redistribuirla, incluso en trabajos comerciales, citando la autoría. Se entrega sin garantía: la responsabilidad de verificar los resultados de un diseño real es de quien los usa.
