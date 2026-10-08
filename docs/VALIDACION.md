@@ -96,12 +96,28 @@ El perfil de potencial varía en la escala del espaciamiento entre conductores, 
 
 Por omisión los subsegmentos miden un cuarto del espaciamiento, que deja el resultado a ~1 % del valor convergido.
 
+### Dos escalas de tensión que no se mezclan
+
+El modelo resuelve su propia resistencia, menor que la de Sverak. Si el resto del cálculo adopta Sverak, hay **dos escalas de tensión distintas** y restar un potencial de superficie del modelo a un GPR de Sverak da una tensión de toque sin significado físico.
+
+`ModeloPotencial.en_escala(gpr_adoptado)` hace la conversión una sola vez: el modelo aporta la forma del perfil (qué fracción del GPR cae en cada punto) y se aplica al GPR adoptado.
+
+    V_escalado(P) = V_modelo(P) · (GPR_adoptado / GPR_modelo)
+    E_toque(P)    = GPR_adoptado − V_escalado(P)
+
+Así se cumple siempre `V_escalado(P) + E_toque(P) = GPR_adoptado`. Hay pruebas que lo verifican punto a punto, porque mezclar las escalas fue un error real de una versión anterior del informe del caso.
+
+### La superficie bajo cada apoyo
+
+La tensión de paso tolerable supone **los dos pies sobre la misma superficie**: el factor Cs vale para una capa superficial continua bajo ambos apoyos. En el borde de la grava hay un tramo de un metro donde un pie queda sobre grava y el otro sobre suelo expuesto. Ese caso no tiene límite aplicable con la fórmula de Cs; `ejemplos/caso_libro_cerco.py` lo informa aparte, sin cociente, en lugar de compararlo contra uno de los dos límites.
+
 ### Lo que este modelo no hace
 
 - Suelo uniforme: no representa dos capas ni heterogeneidad lateral.
 - Modelo resistivo: no incluye el acoplamiento inductivo ni la impedancia longitudinal del conductor.
 - No sustituye al método simplificado en el interior de la malla. Em y Es siguen gobernando esa comprobación; el modelo cubre las posiciones que el método no alcanza.
 - La tensión metal-metal entre dos partes metálicas distintas (hoja de puerta y marco, por ejemplo) depende del detalle de su unión y queda fuera del modelo.
+- El caso de un pie sobre grava y el otro sobre suelo expuesto: se informa, pero la norma no da un límite para él.
 
 ## Qué sigue sin validar externamente
 

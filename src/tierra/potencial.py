@@ -272,6 +272,14 @@ class ModeloPotencial:
                 peor = (p["toque"], p["x"], p["y"])
         return peor
 
+    def en_escala(self, gpr_adoptado):
+        """Devuelve los resultados en la escala de otro GPR (ver PerfilEscalado).
+
+        Usalo cuando el resto del calculo adopte una Rg distinta de la del modelo,
+        para no mezclar dos escalas de tension en la misma tabla.
+        """
+        return PerfilEscalado(self, gpr_adoptado)
+
     def paso_maximo(self, punto_a, punto_b, n=120, separacion=1.0):
         """Maxima tension de paso a lo largo de una linea, con apoyos separados
         `separacion` metros en la direccion de la linea. Devuelve (E, x, y)."""
@@ -315,6 +323,67 @@ def posiciones_perimetro(x0, y0, lx, ly, n):
                 break
             s -= largo
     return out
+
+
+class PerfilEscalado:
+    """Resultados del modelo expresados en la escala de un GPR adoptado.
+
+    El modelo entrega su propia resistencia y, con ella, su propio GPR. Si el
+    resto del calculo adopta otra Rg -- normalmente la formula cerrada de Sverak,
+    que queda del lado conservador -- las dos escalas de tension NO son
+    intercambiables: restar un potencial de superficie del modelo a un GPR de
+    Sverak da una tension de toque sin significado fisico.
+
+    Esta clase hace la conversion de una vez y para todo. El modelo aporta la
+    FORMA del perfil (que fraccion del GPR cae en cada punto) y aqui se aplica al
+    GPR adoptado:
+
+        V_escalado(P) = V_modelo(P) * (GPR_adoptado / GPR_modelo)
+        E_toque(P)    = GPR_adoptado - V_escalado(P)
+
+    Asi se cumple siempre V_escalado(P) + E_toque(P) = GPR_adoptado, y cualquier
+    tabla que mezcle columnas queda coherente.
+    """
+
+    def __init__(self, modelo, gpr_adoptado):
+        if gpr_adoptado <= 0:
+            raise ValueError("El GPR adoptado debe ser positivo.")
+        self.modelo = modelo
+        self.gpr = float(gpr_adoptado)
+        self.factor = self.gpr / modelo.gpr
+
+    @property
+    def rg(self):
+        """Resistencia implicita en el GPR adoptado [ohm]."""
+        return self.gpr / self.modelo.ig
+
+    def potencial(self, px, py, pz=0.0):
+        return self.modelo.potencial(px, py, pz) * self.factor
+
+    def toque(self, px, py):
+        return self.gpr - self.potencial(px, py, 0.0)
+
+    def paso(self, p1, p2):
+        return self.modelo.paso(p1, p2) * self.factor
+
+    def perfil(self, punto_a, punto_b, n=60):
+        out = []
+        for p in self.modelo.perfil(punto_a, punto_b, n):
+            v = p["v"] * self.factor
+            out.append({"s": p["s"], "x": p["x"], "y": p["y"], "v": v,
+                        "toque": self.gpr - v})
+        return out
+
+    def toque_maximo(self, punto_a, punto_b, n=120):
+        peor = (-float("inf"), None, None)
+        for p in self.perfil(punto_a, punto_b, n):
+            if p["toque"] > peor[0]:
+                peor = (p["toque"], p["x"], p["y"])
+        return peor
+
+    def paso_maximo(self, punto_a, punto_b, n=120, separacion=1.0):
+        e, x, y = self.modelo.paso_maximo(punto_a, punto_b, n, separacion)
+        return e * self.factor, x, y
 
 
 def segmentos_malla_rectangular(malla, x0=0.0, y0=0.0, varillas_xy=None):

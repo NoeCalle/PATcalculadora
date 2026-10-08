@@ -4,11 +4,22 @@ Resuelve los marcadores [CALCULAR] del manual que el metodo simplificado de
 IEEE 80 no cubre: el toque en el cerco y en la puerta, el paso en el exterior y
 el contraste de las areas ampliadas con sus separaciones reales.
 
+CONVENIO DE ESCALA. El modelo de potencial resuelve su propia resistencia, que
+queda por debajo de la de Sverak (ver docs/VALIDACION.md). El manual adopta
+Sverak, asi que TODAS las tensiones de este informe se expresan en la escala del
+GPR del manual: el modelo aporta la forma del perfil y se aplica al GPR adoptado
+mediante tierra.potencial.PerfilEscalado. Nunca se mezclan las dos escalas.
+
+SUPERFICIE DE LOS APOYOS. La tension de paso tolerable supone los dos pies sobre
+la misma superficie. Este informe clasifica cada medicion segun donde cae cada
+apoyo y senala por separado los casos que quedan a caballo del borde de la grava,
+que la formula de Cs no cubre.
+
 Ejecutar:  python ejemplos/caso_libro_cerco.py
 """
 
-import sys
 import os
+import sys
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
@@ -18,22 +29,26 @@ from tierra.malla import Malla  # noqa: E402
 # --------------------------------------------------------------------------
 # Datos del caso (ficha del manual)
 # --------------------------------------------------------------------------
-RHO = 150.0           # resistividad del suelo [ohm*m], modelo uniforme
-RHO_S, HS = 3000.0, 0.10   # grava
-PESO, TS = 50, 0.70        # persona y duracion de respaldo
-I_FALLA_MT, X_R = 5.0, 10.0   # kA, relacion X/R de la falla de MT
-D_COND = 0.0105            # diametro del conductor enterrado de 70 mm2 [m]
+RHO = 150.0                 # resistividad del suelo [ohm*m], modelo uniforme
+RHO_S, HS = 3000.0, 0.10    # grava
+PESO, TS = 50, 0.70         # persona y duracion de respaldo
+I_FALLA_MT, X_R = 5.0, 10.0  # kA y relacion X/R de la falla de MT
+D_COND = 0.0105             # diametro del conductor enterrado de 70 mm2 [m]
 
 # Recinto: rectangulo original de 20 x 30 m con origen en su esquina suroeste.
 # El cerco esta 0.50 m hacia dentro; la puerta ocupa x de 8 a 12 m en el lado sur.
 CERCO = [(0.5, 0.5), (19.5, 0.5), (19.5, 29.5), (0.5, 29.5)]
-PUERTA = ((8.0, 0.5), (12.0, 0.5))
+PUERTA_X = (8.0, 12.0)
+PUERTA_Y = 0.5
+
+# Grava del diseno final: cubre hasta 2 m mas alla del borde de G2, o sea 7.5 m
+# por fuera del cerco.
+GRAVA_HASTA = 7.5   # m medidos desde el cerco hacia fuera
 
 DF = falla.factor_decremento(TS, X_R, 60.0)
 
-# Geometrias: (nombre, lx, ly, nx, ny, x0, y0, Sf, Rg_libro)
+# (nombre, lx, ly, nx, ny, x0, y0, Sf, Rg del manual)
 # nx = conductores paralelos a x (de longitud lx); ny = paralelos a y.
-# x0, y0 = esquina suroeste, en el marco del rectangulo original.
 GEOMETRIAS = [
     ("G0  20x30 D=10",      20, 30,  4,  3,   0.0,  0.0, 0.364, 3.45),
     ("G1  20x30 D=2",       20, 30, 16, 11,   0.0,  0.0, 0.403, 2.85),
@@ -49,197 +64,223 @@ GEOMETRIAS = [
 def limites():
     cs_g, paso_g, toque_g = tolerables.tensiones_tolerables(RHO, TS, PESO, RHO_S, HS)
     cs_s, paso_s, toque_s = tolerables.tensiones_tolerables(RHO, TS, PESO)
-    return {
-        "cs_grava": cs_g, "toque_grava": toque_g, "paso_grava": paso_g,
-        "toque_suelo": toque_s, "paso_suelo": paso_s,
-        "metal_metal": pot.tolerable_metal_metal(TS, PESO),
-    }
+    return {"cs_grava": cs_g, "toque_grava": toque_g, "paso_grava": paso_g,
+            "toque_suelo": toque_s, "paso_suelo": paso_s,
+            "metal_metal": pot.tolerable_metal_metal(TS, PESO)}
 
 
-def _lado_exterior(p, centro, retiro):
-    """Desplaza el punto p una distancia `retiro` alejandose del centro."""
+def _hacia_fuera(p, centro, retiro):
+    """Desplaza p una distancia `retiro` alejandose del centro, perpendicular
+    al lado de cerco mas proximo."""
     dx, dy = p[0] - centro[0], p[1] - centro[1]
-    n = max(abs(dx), abs(dy))
-    if n == 0:
-        return p
-    # se retira en la direccion dominante, perpendicular al lado del cerco
     if abs(dx) >= abs(dy):
         return (p[0] + retiro * (1 if dx > 0 else -1), p[1])
     return (p[0], p[1] + retiro * (1 if dy > 0 else -1))
 
 
-def analizar(nombre, lx, ly, nx, ny, x0, y0, sf, rg_libro, n_perfil=60):
+def analizar(nombre, lx, ly, nx, ny, x0, y0, sf, rg_manual, n_perfil=60):
     m = Malla.rectangular(lx, ly, nx, ny, h=0.50, d=D_COND, n_varillas=4, l_varilla=3.0)
     ig = I_FALLA_MT * 1000.0 * sf * DF
-    gpr_libro = ig * rg_libro
-    mod = pot.modelo_de_malla(m, RHO, ig, x0=x0, y0=y0)
-
-    # El perfil del modelo se expresa como fraccion del GPR y se aplica al GPR
-    # del manual (calculado con Sverak), para no mezclar dos resistencias.
-    def toque_en(p):
-        frac = 1.0 - mod.potencial(p[0], p[1], 0.0) / mod.gpr
-        return frac * gpr_libro
-
+    modelo = pot.modelo_de_malla(m, RHO, ig, x0=x0, y0=y0)
+    # Una sola escala: la del GPR del manual.
+    esc = modelo.en_escala(ig * rg_manual)
     centro = (x0 + lx / 2.0, y0 + ly / 2.0)
 
-    # Recorremos el cerco: sobre la linea y a 1 m hacia fuera del recinto.
     peor_cerco = (-1e9, None)
-    peor_cerco_1m = (-1e9, None)
+    peor_1m = (-1e9, None)
     for i in range(4):
         a, b = CERCO[i], CERCO[(i + 1) % 4]
         for k in range(n_perfil + 1):
             f = k / n_perfil
             p = (a[0] + (b[0] - a[0]) * f, a[1] + (b[1] - a[1]) * f)
-            e = toque_en(p)
+            e = esc.toque(*p)
             if e > peor_cerco[0]:
                 peor_cerco = (e, p)
-            q = _lado_exterior(p, centro, 1.0)
-            e1 = toque_en(q)
-            if e1 > peor_cerco_1m[0]:
-                peor_cerco_1m = (e1, q)
+            q = _hacia_fuera(p, centro, 1.0)
+            e1 = esc.toque(*q)
+            if e1 > peor_1m[0]:
+                peor_1m = (e1, q)
 
-    # Puerta: persona fuera de la puerta, a 1 m, tocando la hoja metalica.
     peor_puerta = (-1e9, None)
     for k in range(n_perfil + 1):
-        f = k / n_perfil
-        px = PUERTA[0][0] + (PUERTA[1][0] - PUERTA[0][0]) * f
+        px = PUERTA_X[0] + (PUERTA_X[1] - PUERTA_X[0]) * k / n_perfil
         for dy in (0.0, -1.0):
-            p = (px, PUERTA[0][1] + dy)
-            e = toque_en(p)
+            p = (px, PUERTA_Y + dy)
+            e = esc.toque(*p)
             if e > peor_puerta[0]:
                 peor_puerta = (e, p)
 
-    # Paso en el exterior: linea que sale del centro del lado sur hacia fuera.
-    e_paso, xp, yp = mod.paso_maximo((centro[0], y0 + ly / 2.0), (centro[0], y0 - 25.0), n=120)
+    # Paso: linea x = centro, desde el centro de la malla hasta 30 m al sur del
+    # cerco. Se recorre con apoyos separados 1 m y se clasifica la superficie.
+    paso_grava = (-1e9, None)
+    paso_suelo = (-1e9, None)
+    paso_mixto = (-1e9, None)
+    EPS = 1e-9   # el borde de la grava se compara con tolerancia
+    pasos = int((30.0 + ly / 2.0) / 0.05) + 1
+    for i in range(pasos):
+        d = -(ly / 2.0) + 0.05 * i   # arranca en el centro de la malla
+        p1 = (centro[0], PUERTA_Y - d)
+        p2 = (centro[0], PUERTA_Y - d - 1.0)
+        e = esc.paso(p1, p2)
+        g1 = d <= GRAVA_HASTA + EPS
+        g2 = (d + 1.0) <= GRAVA_HASTA + EPS
+        if g1 and g2:
+            if e > paso_grava[0]:
+                paso_grava = (e, d)
+        elif not (g1 or g2):
+            if e > paso_suelo[0]:
+                paso_suelo = (e, d)
+        else:
+            if e > paso_mixto[0]:
+                paso_mixto = (e, d)
 
-    return {
-        "nombre": nombre, "malla": m, "modelo": mod, "ig": ig,
-        "rg_libro": rg_libro, "rg_sverak": m.rg_sverak(RHO), "rg_modelo": mod.rg,
-        "gpr_libro": gpr_libro, "em": m.tension_malla(RHO, ig), "es": m.tension_paso(RHO, ig),
-        "toque_cerco": peor_cerco, "toque_cerco_1m": peor_cerco_1m,
-        "toque_puerta": peor_puerta, "paso_exterior": (e_paso, xp, yp),
-        "lc": m.lc,
-    }
+    return {"nombre": nombre, "malla": m, "modelo": modelo, "escala": esc, "ig": ig,
+            "rg_manual": rg_manual, "rg_sverak": m.rg_sverak(RHO), "rg_modelo": modelo.rg,
+            "gpr_manual": esc.gpr, "gpr_modelo": modelo.gpr, "factor": esc.factor,
+            "em": m.tension_malla(RHO, ig), "es": m.tension_paso(RHO, ig),
+            "toque_cerco": peor_cerco, "toque_1m": peor_1m, "toque_puerta": peor_puerta,
+            "paso_grava": paso_grava, "paso_suelo": paso_suelo, "paso_mixto": paso_mixto}
 
 
 def main():
     lim = limites()
+    L = "-" * 104
     print("CASO DEL MANUAL - TOQUE EN CERCO Y PUERTA")
-    print("=" * 108)
-    print(f"Suelo {RHO:g} ohm*m · grava {RHO_S:g} ohm*m de {HS:g} m · persona de {PESO} kg · "
-          f"ts = {TS:g} s · falla de MT {I_FALLA_MT:g} kA con X/R = {X_R:g} · Df = {DF:.4f}")
-    print(f"Limites tolerables: toque sobre grava {lim['toque_grava']:.0f} V · "
-          f"paso sobre grava {lim['paso_grava']:.0f} V · toque sobre suelo expuesto "
-          f"{lim['toque_suelo']:.0f} V · paso sobre suelo expuesto {lim['paso_suelo']:.0f} V · "
-          f"metal-metal {lim['metal_metal']:.0f} V")
+    print("=" * 104)
+    print(f"Suelo {RHO:g} ohm*m · grava {RHO_S:g} ohm*m de {HS:g} m hasta {GRAVA_HASTA:g} m "
+          f"del cerco · persona de {PESO} kg · ts = {TS:g} s")
+    print(f"Falla de MT {I_FALLA_MT:g} kA con X/R = {X_R:g} · Df = {DF:.4f} · "
+          f"IG = 5000 · Sf · Df")
+    print(f"Limites tolerables [V]: toque sobre grava {lim['toque_grava']:.1f} · "
+          f"paso sobre grava {lim['paso_grava']:.1f} · toque sobre suelo {lim['toque_suelo']:.1f} · "
+          f"paso sobre suelo {lim['paso_suelo']:.1f} · metal-metal {lim['metal_metal']:.1f}")
+    print()
+    print("TODAS las tensiones estan en la escala del GPR del manual (Rg de Sverak).")
+    print("El modelo aporta la forma del perfil; el factor de escala se indica por geometria.")
     print()
 
     filas = [analizar(*g) for g in GEOMETRIAS]
 
-    print("1) CONTRASTE DE LAS GEOMETRIAS CON SUS SEPARACIONES REALES  [7.4.1]")
-    print("-" * 108)
-    print(f"{'Geometria':22} {'Lc':>6} {'Dx':>5} {'Dy':>5} {'Rg libro':>9} {'Rg Sverak':>10} "
-          f"{'Rg modelo':>10} {'GPR':>7} {'Em':>7} {'Es':>7}")
+    print("1) GEOMETRIAS CON SUS SEPARACIONES REALES  [7.4.1]")
+    print(L)
+    print(f"{'Geometria':22} {'Lc':>5} {'Dx':>5} {'Dy':>5} {'IG':>7} "
+          f"{'Rg man.':>8} {'Rg Sver.':>9} {'Rg mod.':>8} {'GPR man.':>9} {'GPR mod.':>9} "
+          f"{'k':>6} {'Em':>6} {'Es':>6}")
     for r in filas:
         m = r["malla"]
         dx, dy = m.lx / (m.ny_cond - 1), m.ly / (m.nx_cond - 1)
-        print(f"{r['nombre']:22} {r['lc']:6.0f} {dx:5.2f} {dy:5.2f} {r['rg_libro']:9.2f} "
-              f"{r['rg_sverak']:10.3f} {r['rg_modelo']:10.3f} {r['gpr_libro']:7.0f} "
-              f"{r['em']:7.0f} {r['es']:7.0f}")
+        print(f"{r['nombre']:22} {m.lc:5.0f} {dx:5.2f} {dy:5.2f} {r['ig']:7.1f} "
+              f"{r['rg_manual']:8.2f} {r['rg_sverak']:9.3f} {r['rg_modelo']:8.3f} "
+              f"{r['gpr_manual']:9.1f} {r['gpr_modelo']:9.1f} {r['factor']:6.4f} "
+              f"{r['em']:6.0f} {r['es']:6.0f}")
+    print()
+    print("  'Rg man.' es la del manual; 'Rg Sver.' la que recalcula esta herramienta con la")
+    print("  misma formula (coinciden); 'Rg mod.' la del modelo de potencial. k = GPR man./GPR mod.")
+    print("  Em y Es son del metodo simplificado y describen solo el INTERIOR de la malla.")
     print()
 
     print("2) TOQUE EN CERCO Y PUERTA  [3.2.1, 3.3.1, 5.5, 6.3.1, 6.5.1, 7.5]")
-    print("-" * 108)
-    print(f"{'Geometria':22} {'cerco':>8} {'a 1 m':>8} {'puerta':>8} "
-          f"{'/579 grava':>11} {'/170 suelo':>11} {'paso ext.':>10} {'veredicto':>12}")
+    print(L)
+    print(f"{'Geometria':22} {'cerco':>8} {'a 1 m':>8} {'puerta':>8} {'peor':>8} "
+          f"{'/579 grava':>11} {'/170 suelo':>11} {'veredicto':>12}")
     for r in filas:
-        tc = max(r["toque_cerco"][0], r["toque_cerco_1m"][0], r["toque_puerta"][0])
-        ok_grava = tc <= lim["toque_grava"]
-        print(f"{r['nombre']:22} {r['toque_cerco'][0]:8.0f} {r['toque_cerco_1m'][0]:8.0f} "
-              f"{r['toque_puerta'][0]:8.0f} {tc/lim['toque_grava']:11.2f} "
-              f"{tc/lim['toque_suelo']:11.2f} {r['paso_exterior'][0]:10.0f} "
-              f"{'cumple' if ok_grava else 'NO cumple':>12}")
+        peor = max(r["toque_cerco"][0], r["toque_1m"][0], r["toque_puerta"][0])
+        ok = peor <= lim["toque_grava"]
+        print(f"{r['nombre']:22} {r['toque_cerco'][0]:8.1f} {r['toque_1m'][0]:8.1f} "
+              f"{r['toque_puerta'][0]:8.1f} {peor:8.1f} {peor/lim['toque_grava']:11.3f} "
+              f"{peor/lim['toque_suelo']:11.3f} {'cumple' if ok else 'NO cumple':>12}")
     print()
-    print("  'cerco'  : maximo sobre la linea del cerco.")
-    print("  'a 1 m'  : persona 1 m fuera del cerco tocando la malla metalica.")
-    print("  'puerta' : maximo en la puerta (x de 8 a 12 m, lado sur) y 1 m por fuera.")
-    print("  Los cocientes usan el mayor de los tres. Sobre grava el limite es "
-          f"{lim['toque_grava']:.0f} V; sobre suelo expuesto, {lim['toque_suelo']:.0f} V.")
+    print("  'cerco' : peor punto sobre la linea del cerco, persona ahi tocando el cerco.")
+    print("  'a 1 m' : persona 1 m por fuera del cerco, tocandolo con el brazo extendido.")
+    print("  'puerta': peor punto en la puerta (x de 8 a 12 m, lado sur) y 1 m por fuera.")
+    print("  Los cocientes usan 'peor'. La superficie bajo los pies decide el limite: con")
+    print("  grava son 579 V; sobre suelo expuesto, 170 V. Solo G2 tiene grava especificada")
+    print("  hasta 7.5 m del cerco, asi que para las demas se dan ambos cocientes.")
     print()
 
-    print("3) PERFIL SALIENDO DEL CERCO - G2 CON GRAVA EXTENDIDA  [6.3.1]")
-    print("-" * 108)
+    print("3) PASO, CLASIFICADO POR LA SUPERFICIE DE CADA APOYO")
+    print(L)
+    print(f"{'Geometria':22} {'ambos grava':>12} {'/1899':>7} {'ambos suelo':>12} {'/263':>7} "
+          f"{'a caballo':>10} {'dist.':>7}")
+    for r in filas:
+        pg, ps, pm = r["paso_grava"], r["paso_suelo"], r["paso_mixto"]
+        print(f"{r['nombre']:22} {pg[0]:12.1f} {pg[0]/lim['paso_grava']:7.3f} "
+              f"{ps[0]:12.1f} {ps[0]/lim['paso_suelo']:7.3f} {pm[0]:10.1f} {pm[1]:7.1f}")
+    print()
+    print("  Recorrido: linea x = centro de la malla, desde el centro hasta 30 m al sur del")
+    print("  cerco, con los dos apoyos separados 1 m en la direccion de la linea.")
+    print("  'ambos grava': los dos apoyos dentro de los 7.5 m de grava.")
+    print("  'ambos suelo': los dos apoyos mas alla del borde de la grava.")
+    print("  'a caballo'  : un apoyo sobre grava y el otro sobre suelo expuesto. La formula")
+    print("                 de Cs supone los dos pies sobre la misma superficie, por lo que")
+    print("                 este caso NO tiene limite aplicable; se informa sin cociente.")
+    print()
+
+    print("4) PERFIL SALIENDO DEL CERCO - G2 CON GRAVA EXTENDIDA  [6.3.1]")
+    print(L)
     g2 = filas[-1]
-    mod, gpr = g2["modelo"], g2["gpr_libro"]
-    print(f"{'dist. del cerco (m)':>20} {'V superficie':>13} {'toque':>8} {'/lim':>6} "
-          f"{'paso 1 m':>9} {'/lim':>6} {'superficie':>14}")
-    for d in (0.0, 0.5, 1.0, 2.0, 3.0, 5.0, 5.5, 7.5, 10.0, 15.0):
-        p = (10.0, 0.5 - d)   # saliendo por el lado sur, frente a la puerta
-        v = mod.potencial(p[0], p[1], 0.0)
-        frac = 1.0 - v / mod.gpr
-        e_toque = frac * gpr
-        e_paso = mod.paso(p, (p[0], p[1] - 1.0)) / mod.gpr * gpr
-        en_grava = d <= 7.5
-        lt = lim["toque_grava"] if en_grava else lim["toque_suelo"]
-        lp = lim["paso_grava"] if en_grava else lim["paso_suelo"]
-        sup = "grava" if en_grava else "suelo expuesto"
-        # El toque solo aplica donde la persona alcanza el cerco (hasta ~1 m).
-        col_toque = f"{e_toque:8.0f}" if d <= 1.0 else "       -"
-        col_rt = f"{e_toque/lt:6.2f}" if d <= 1.0 else "     -"
-        print(f"{d:20.1f} {v:13.0f} {col_toque} {col_rt} {e_paso:9.0f} "
-              f"{e_paso/lp:6.2f} {sup:>14}")
-    print("  El toque exige algo metalico al alcance de la mano: solo aplica junto al cerco")
-    print("  (hasta ~1 m). Mas alla, la comprobacion que gobierna es la tension de paso.")
+    esc = g2["escala"]
+    print(f"  Potencial del cerco = GPR del manual = {esc.gpr:.1f} V  (el cerco esta unido a la malla)")
+    print(f"  Corriente inyectada IG = {g2['ig']:.1f} A · Rg del modelo = {g2['rg_modelo']:.4f} ohm "
+          f"· GPR del modelo = {g2['gpr_modelo']:.1f} V · factor k = {esc.factor:.4f}")
     print()
-    # El punto critico del exterior es el borde de la grava: ahi el limite de paso
-    # cae de 1899 V a 263 V de golpe. Buscamos el peor cociente sobre suelo expuesto.
-    peor = (-1.0, None, None)
-    d = 7.5
-    while d <= 30.0:
-        p = (10.0, 0.5 - d)
-        e = mod.paso(p, (p[0], p[1] - 1.0)) / mod.gpr * gpr
-        coc = e / lim["paso_suelo"]
-        if coc > peor[0]:
-            peor = (coc, d, e)
-        d += 0.25
-    print(f"  Peor paso sobre suelo expuesto (desde el borde de la grava, a 7.5 m del cerco):")
-    print(f"    {peor[2]:.0f} V a {peor[1]:.2f} m del cerco · limite {lim['paso_suelo']:.0f} V · "
-          f"cociente {peor[0]:.2f}  ->  {'cumple' if peor[0] <= 1 else 'NO cumple'}")
+    print(f"{'dist. cerco (m)':>16} {'V superficie':>13} {'GPR - V':>9} {'toque':>8} "
+          f"{'paso 1 m':>9} {'superficie de los apoyos':>26}")
+    for d in (0.0, 0.5, 1.0, 2.0, 3.0, 5.0, 5.5, 7.0, 7.5, 10.0, 15.0):
+        p = (10.0, PUERTA_Y - d)
+        v = esc.potencial(*p)
+        e_toque = esc.toque(*p)
+        e_paso = esc.paso(p, (p[0], p[1] - 1.0))
+        g1, g2b = d <= GRAVA_HASTA, (d + 1.0) <= GRAVA_HASTA
+        sup = "grava / grava" if (g1 and g2b) else ("suelo / suelo" if not (g1 or g2b)
+                                                    else "grava / suelo (a caballo)")
+        col_t = f"{e_toque:8.1f}" if d <= 1.0 else "       -"
+        print(f"{d:16.1f} {v:13.1f} {esc.gpr - v:9.1f} {col_t} {e_paso:9.1f} {sup:>26}")
+    print()
+    print("  'V superficie' y 'toque' estan en la misma escala: su suma es el GPR del manual.")
+    print("  El toque solo aplica donde la persona alcanza el cerco (hasta ~1 m); mas alla la")
+    print("  comprobacion que gobierna es el paso.")
     print()
 
-    print("4) CONEXIONES DE BT: 43 kA, 0.20 s, X/R = 3  [5.2, 5.5, 6.5]")
-    print("-" * 108)
+    print("5) CONEXIONES DE BT: 43 kA, 0.20 s, X/R = 3  [5.2, 5.5, 6.5]")
+    print(L)
     df_bt = falla.factor_decremento(0.20, 3.0, 60.0)
     i_bt = 43.0 * df_bt
+    print(f"  Df = {df_bt:.4f} · corriente termica = {i_bt:.2f} kA · temperatura inicial 40 C")
     for union, etiqueta in (("conector_mecanico", "conector mecanico (250 C)"),
                             ("soldadura_fuerte", "soldadura fuerte (450 C)"),
                             ("soldadura_exotermica", "soldadura exotermica (fusion)")):
         a = conductor.seccion_minima_mm2(i_bt, 0.20, "cobre_duro", 40.0, union)
         print(f"  {etiqueta:32} seccion minima {a:6.1f} mm2   "
               f"enlace de 120 mm2: {'cumple' if 120 >= a else 'NO cumple'}")
-    print(f"  Df de BT = {df_bt:.4f}; corriente termica = {i_bt:.2f} kA; temperatura inicial 40 C.")
     print()
-    print("5) RESUMEN PARA LA MEMORIA  [6.5, 6.5.1]")
-    print("-" * 108)
-    g2r = filas[-1]
-    tc = max(g2r["toque_cerco"][0], g2r["toque_cerco_1m"][0], g2r["toque_puerta"][0])
-    print(f"  G2 interior : Em {g2r['em']:.0f} V / {lim['toque_grava']:.0f} V = "
-          f"{g2r['em']/lim['toque_grava']:.2f}  ->  cumple")
-    print(f"  G2 cerco    : {tc:.0f} V / {lim['toque_grava']:.0f} V = "
-          f"{tc/lim['toque_grava']:.2f}  ->  {'cumple' if tc <= lim['toque_grava'] else 'NO cumple'}")
-    print(f"  G2 puerta   : {g2r['toque_puerta'][0]:.0f} V / {lim['toque_grava']:.0f} V = "
-          f"{g2r['toque_puerta'][0]/lim['toque_grava']:.2f}  ->  "
-          f"{'cumple' if g2r['toque_puerta'][0] <= lim['toque_grava'] else 'NO cumple'}"
-          f"   (persona sobre grava que toca la hoja)")
-    print(f"  Nota metal-metal: el limite de {lim['metal_metal']:.0f} V no se aplica a la cifra")
-    print( "  anterior, sino a la DIFERENCIA de potencial entre dos partes metalicas que la")
-    print( "  persona puede tocar a la vez (hoja y marco, o hoja y poste). Si la puerta esta")
-    print( "  unida al cerco y este a la malla, esa diferencia es practicamente nula y la")
-    print( "  comprobacion la gobierna el toque ordinario. Sin esa union, hay que calcularla")
-    print( "  con el detalle de la union, que este modelo no representa.")
-    print(f"  Conexiones BT: 120 mm2 frente a "
-          f"{conductor.seccion_minima_mm2(i_bt, 0.20, 'cobre_duro', 40.0, 'conector_mecanico'):.0f} mm2 requeridos"
-          f"  ->  cumple")
+
+    print("6) RESUMEN DE G2 PARA LA MEMORIA  [6.5, 6.5.1]")
+    print(L)
+    r = filas[-1]
+    peor_toque = max(r["toque_cerco"][0], r["toque_1m"][0], r["toque_puerta"][0])
+    a_bt = conductor.seccion_minima_mm2(i_bt, 0.20, "cobre_duro", 40.0, "conector_mecanico")
+    tabla = [
+        ("Toque interior (Em, metodo simplificado)", r["em"], lim["toque_grava"], "V"),
+        ("Toque junto al cerco y en la puerta", peor_toque, lim["toque_grava"], "V"),
+        ("Paso, ambos apoyos sobre grava", r["paso_grava"][0], lim["paso_grava"], "V"),
+        ("Paso, ambos apoyos sobre suelo expuesto", r["paso_suelo"][0], lim["paso_suelo"], "V"),
+        ("Enlace de BT (120 mm2 adoptados)", a_bt, 120.0, "mm2"),
+    ]
+    print(f"{'Comprobacion':44} {'Resultado':>11} {'Limite':>9} {'Cociente':>9} {'Veredicto':>11}")
+    for nombre, val, lim_v, u in tabla:
+        coc = val / lim_v
+        print(f"{nombre:44} {val:9.1f} {u:>2} {lim_v:9.1f} {coc:9.3f} "
+              f"{'cumple' if coc <= 1 else 'NO cumple':>11}")
+    print()
+    print(f"  Caso a caballo del borde de la grava: {r['paso_mixto'][0]:.1f} V a "
+          f"{r['paso_mixto'][1]:.1f} m del cerco, sin limite aplicable (ver seccion 3).")
+    print("  Metal-metal: el limite de "
+          f"{lim['metal_metal']:.1f} V no se aplica al toque de la puerta de arriba, sino a la")
+    print("  DIFERENCIA de potencial entre dos partes metalicas que la persona toque a la vez")
+    print("  (hoja y marco, hoja y poste). Si la puerta esta unida al cerco y este a la malla,")
+    print("  esa diferencia es practicamente nula. Sin esa union hay que calcularla con el")
+    print("  detalle de la union, que este modelo no representa.")
 
 
 if __name__ == "__main__":

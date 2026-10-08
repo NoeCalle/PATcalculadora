@@ -212,3 +212,61 @@ def test_peso_invalido_metal_metal():
         pot.tolerable_metal_metal(0.5, 60)
     with pytest.raises(ValueError):
         pot.tolerable_metal_metal(0.0, 70)
+
+
+# ---------------- escala adoptada (PerfilEscalado) ----------------
+# El defecto que estas pruebas impiden: expresar el potencial de superficie en la
+# escala del modelo y la tension de toque en la escala de Sverak, en la misma
+# tabla. La suma deja de ser el GPR y el toque pierde significado fisico.
+
+def test_la_suma_de_potencial_y_toque_es_el_gpr_adoptado(modelo_g2):
+    mod, _ = modelo_g2
+    esc = mod.en_escala(4856.7)
+    for p in [(0.5, 0.5), (10.0, -0.5), (10.0, -7.0), (5.0, 5.0), (-4.0, 20.0)]:
+        assert esc.potencial(*p) + esc.toque(*p) == pytest.approx(esc.gpr, rel=1e-12)
+
+
+def test_el_perfil_escalado_tambien_cumple_la_suma(modelo_g2):
+    mod, _ = modelo_g2
+    esc = mod.en_escala(4856.7)
+    for q in esc.perfil((10.0, 0.5), (10.0, -15.0), n=20):
+        assert q["v"] + q["toque"] == pytest.approx(esc.gpr, rel=1e-12)
+
+
+def test_escalar_al_propio_gpr_no_cambia_nada(modelo_g2):
+    mod, _ = modelo_g2
+    esc = mod.en_escala(mod.gpr)
+    assert esc.factor == pytest.approx(1.0)
+    assert esc.toque(0.5, 0.5) == pytest.approx(mod.toque(0.5, 0.5))
+    assert esc.paso((10, -7), (10, -8)) == pytest.approx(mod.paso((10, -7), (10, -8)))
+
+
+def test_todas_las_magnitudes_escalan_con_el_mismo_factor(modelo_g2):
+    mod, _ = modelo_g2
+    esc = mod.en_escala(2.0 * mod.gpr)
+    assert esc.factor == pytest.approx(2.0)
+    assert esc.potencial(10.0, -3.0) == pytest.approx(2.0 * mod.potencial(10.0, -3.0))
+    assert esc.paso((10, -7), (10, -8)) == pytest.approx(2.0 * mod.paso((10, -7), (10, -8)))
+    e_esc, _, _ = esc.paso_maximo((10.0, 0.5), (10.0, -20.0), n=40)
+    e_mod, _, _ = mod.paso_maximo((10.0, 0.5), (10.0, -20.0), n=40)
+    assert e_esc == pytest.approx(2.0 * e_mod)
+
+
+def test_la_rg_implicita_corresponde_al_gpr_adoptado(modelo_g2):
+    mod, _ = modelo_g2
+    esc = mod.en_escala(2404.3 * 2.02)
+    assert esc.rg == pytest.approx(2404.3 * 2.02 / mod.ig)
+
+
+def test_el_toque_escalado_nunca_supera_el_gpr(modelo_g2):
+    mod, _ = modelo_g2
+    esc = mod.en_escala(4856.7)
+    for p in [(0.5, 0.5), (10.0, -30.0), (10.0, -200.0)]:
+        assert 0.0 < esc.toque(*p) <= esc.gpr
+
+
+def test_gpr_adoptado_invalido(modelo_g2):
+    mod, _ = modelo_g2
+    for malo in (0.0, -100.0):
+        with pytest.raises(ValueError):
+            mod.en_escala(malo)
