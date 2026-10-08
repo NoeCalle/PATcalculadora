@@ -1,0 +1,312 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Calculadora de puesta a tierra</title>
+<style>
+:root{--bg:#f6f7f9;--card:#fff;--ink:#1d2330;--mut:#5d6677;--line:#dfe3ea;--acc:#1f5fbf;--ok:#16794a;--okbg:#e4f5ec;--bad:#b3261e;--badbg:#fdeceb;--warn:#8a5a00;--warnbg:#fff4de}
+@media (prefers-color-scheme:dark){:root{--bg:#14171d;--card:#1c2029;--ink:#e8ebf1;--mut:#9aa3b4;--line:#2d3340;--acc:#6ea2ff;--ok:#5fd39b;--okbg:#17332a;--bad:#ff8f87;--badbg:#3a1d1b;--warn:#f0c26a;--warnbg:#33290f}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+header{padding:20px 16px 8px;max-width:1200px;margin:0 auto}
+h1{font-size:22px;margin:0 0 4px}
+header p{margin:0;color:var(--mut)}
+main{max-width:1200px;margin:0 auto;padding:8px 16px 40px;display:grid;grid-template-columns:minmax(300px,420px) 1fr;gap:16px;align-items:start}
+@media (max-width:860px){main{grid-template-columns:1fr}}
+.card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:14px 16px;margin-bottom:14px}
+.card h2{font-size:15px;margin:0 0 10px;letter-spacing:.2px}
+.row{display:grid;grid-template-columns:1fr 110px;gap:8px;align-items:center;margin:6px 0}
+.row label{font-size:13.5px}
+.row small{display:block;color:var(--mut);font-size:12px}
+input,select,textarea{width:100%;padding:6px 8px;border:1px solid var(--line);border-radius:6px;background:var(--bg);color:var(--ink);font:inherit}
+textarea{min-height:90px;font-family:ui-monospace,Menlo,Consolas,monospace;font-size:13px}
+.row.full{grid-template-columns:1fr}
+button{font:inherit;padding:8px 14px;border-radius:8px;border:1px solid var(--line);background:var(--card);color:var(--ink);cursor:pointer}
+button.primary{background:var(--acc);border-color:var(--acc);color:#fff;font-weight:600}
+button:disabled{opacity:.5;cursor:wait}
+.bar{display:flex;gap:8px;flex-wrap:wrap;margin:6px 0 14px}
+#estado{color:var(--mut);font-size:13px;margin:4px 0 10px}
+.banner{padding:12px 16px;border-radius:10px;font-weight:700;font-size:17px;margin-bottom:14px}
+.banner.ok{background:var(--okbg);color:var(--ok)}
+.banner.bad{background:var(--badbg);color:var(--bad)}
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:10px;margin-bottom:14px}
+.kpi{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:10px 12px}
+.kpi b{display:block;font-size:20px}
+.kpi span{color:var(--mut);font-size:12.5px}
+.ver{margin:10px 0}
+.ver .top{display:flex;justify-content:space-between;font-size:13.5px;margin-bottom:4px}
+.gauge{height:10px;background:var(--line);border-radius:6px;overflow:hidden}
+.gauge i{display:block;height:100%}
+.tag{font-weight:700}
+.tag.ok{color:var(--ok)}.tag.bad{color:var(--bad)}
+.warn{background:var(--warnbg);color:var(--warn);border-radius:8px;padding:8px 12px;margin:6px 0;font-size:13.5px}
+table{width:100%;border-collapse:collapse;font-size:13px}
+th,td{padding:5px 6px;border-bottom:1px solid var(--line);text-align:left;vertical-align:top}
+td.n,th.n{text-align:right;font-variant-numeric:tabular-nums}
+td.f{color:var(--mut);font-family:ui-monospace,Menlo,Consolas,monospace;font-size:12px}
+.hint{color:var(--mut);font-size:12.5px}
+#cargando{position:fixed;inset:0;background:var(--bg);display:flex;align-items:center;justify-content:center;flex-direction:column;gap:10px;z-index:10}
+.spin{width:34px;height:34px;border:4px solid var(--line);border-top-color:var(--acc);border-radius:50%;animation:g 1s linear infinite}
+@keyframes g{to{transform:rotate(360deg)}}
+svg text{fill:var(--mut);font-size:11px}
+@media print{#cargando,.noprint,#form{display:none!important}main{display:block}body{background:#fff;color:#000}}
+</style>
+</head>
+<body>
+<div id="cargando"><div class="spin"></div><div>Cargando el motor de cálculo…</div><div class="hint">La primera vez necesita internet (unos segundos).</div></div>
+<header>
+  <h1>Calculadora de puesta a tierra de subestaciones</h1>
+  <p>Diseño de mallas según IEEE Std 80. Los cálculos corren en tu navegador; no se envía ningún dato.</p>
+</header>
+<main>
+  <section id="form">
+    <div class="bar noprint">
+      <button class="primary" id="btnCalc">Calcular</button>
+      <button id="btnEj">Cargar ejemplo</button>
+      <button id="btnGuardar">Guardar datos</button>
+      <button id="btnAbrir">Abrir datos…</button>
+      <input type="file" id="archivo" accept=".json" hidden>
+    </div>
+    <div id="estado"></div>
+    <div id="campos"></div>
+  </section>
+  <section id="resultados">
+    <div class="card"><h2>Resultados</h2><p class="hint">Completa los datos a la izquierda y pulsa <b>Calcular</b>.</p></div>
+  </section>
+</main>
+
+<script src="https://cdn.jsdelivr.net/pyodide/v0.26.4/full/pyodide.js"></script>
+<script>
+const FUENTES = /*__FUENTES__*/{};
+const MATERIALES = /*__MATERIALES__*/[];
+const UNIONES = [["soldadura_exotermica","Soldadura exotérmica (límite: fusión del conductor)"],["soldadura_fuerte","Soldadura fuerte (450 °C)"],["conector_mecanico","Conector mecánico (250 °C)"]];
+
+const GRUPOS = [
+ {t:"Proyecto", campos:[{id:"proyecto", txt:"Nombre del proyecto", tipo:"texto", v:"Ejemplo didactico: malla 70 x 70 m con 20 varillas"}]},
+ {t:"Suelo", campos:[
+   {id:"suelo_modo", txt:"Origen de la resistividad", tipo:"sel", op:[["uniforme","Valor conocido"],["wenner","Mediciones Wenner"]], v:"uniforme"},
+   {id:"rho", txt:"Resistividad ρ", u:"Ω·m", v:400, ayuda:"Con Wenner: vacío = promedio de las mediciones", grupo:"uni"},
+   {id:"wenner_b", txt:"Profundidad de electrodos b", u:"m", v:0, grupo:"wen"},
+   {id:"wenner_txt", txt:"Mediciones (una por línea: a [m], R [Ω])", tipo:"area", v:"1, 63.7\n2, 31.8\n4, 15.9\n8, 7.96\n16, 3.98", grupo:"wen", full:true}]},
+ {t:"Capa superficial (grava)", campos:[
+   {id:"rho_s", txt:"Resistividad de la capa ρs", u:"Ω·m", v:2500, ayuda:"Vacío o 0 = sin capa"},
+   {id:"hs", txt:"Espesor hs", u:"m", v:0.102}]},
+ {t:"Falla", campos:[
+   {id:"i_falla_ka", txt:"Corriente simétrica de falla 3I0", u:"kA", v:3.18},
+   {id:"sf", txt:"Factor de división Sf", v:0.6, ayuda:"1 = toda la corriente a la malla (conservador)"},
+   {id:"x_r", txt:"Relación X/R", v:10},
+   {id:"frecuencia", txt:"Frecuencia", u:"Hz", v:60},
+   {id:"tf", txt:"Duración de la falla tf", u:"s", v:0.5},
+   {id:"cp", txt:"Factor de crecimiento Cp", v:1}]},
+ {t:"Persona y descarga", campos:[
+   {id:"ts", txt:"Duración de la descarga ts", u:"s", v:0.5, ayuda:"Normalmente igual a tf"},
+   {id:"peso", txt:"Peso corporal", tipo:"sel", op:[["70","70 kg"],["50","50 kg"]], v:"70"}]},
+ {t:"Conductor", campos:[
+   {id:"material", txt:"Material", tipo:"sel", op:MATERIALES, v:"cobre_duro"},
+   {id:"union", txt:"Tipo de unión", tipo:"sel", op:UNIONES, v:"soldadura_exotermica"},
+   {id:"ta", txt:"Temperatura ambiente", u:"°C", v:40},
+   {id:"diametro_mm", txt:"Diámetro del conductor", u:"mm", v:10}]},
+ {t:"Malla", campos:[
+   {id:"lx", txt:"Longitud Lx", u:"m", v:70},
+   {id:"ly", txt:"Longitud Ly", u:"m", v:70},
+   {id:"nx", txt:"N.º de conductores paralelos a x", v:11},
+   {id:"ny", txt:"N.º de conductores paralelos a y", v:11},
+   {id:"h", txt:"Profundidad h", u:"m", v:0.5},
+   {id:"metodo_rg", txt:"Método para Rg", tipo:"sel", op:[["sverak","Sverak"],["schwarz","Schwarz"]], v:"sverak"}]},
+ {t:"Varillas (opcional)", campos:[
+   {id:"v_cant", txt:"Cantidad", v:20},
+   {id:"v_largo", txt:"Longitud de cada una", u:"m", v:7.5},
+   {id:"v_diam", txt:"Diámetro", u:"mm", v:16},
+   {id:"v_perim", txt:"Ubicación", tipo:"sel", op:[["1","Esquinas / perímetro"],["0","Solo interior"]], v:"1"}]}
+];
+
+const $ = id => document.getElementById(id);
+let py = null, ultimo = null;
+
+function pintarCampos(){
+  const cont = $("campos");
+  cont.innerHTML = "";
+  for(const g of GRUPOS){
+    const card = document.createElement("div"); card.className = "card";
+    card.innerHTML = `<h2>${g.t}</h2>`;
+    for(const c of g.campos){
+      const row = document.createElement("div");
+      row.className = "row" + (c.full ? " full" : "");
+      if(c.grupo) row.dataset.grupo = c.grupo;
+      let ctl;
+      if(c.tipo==="sel") ctl = `<select id="${c.id}">${c.op.map(o=>`<option value="${o[0]}"${String(o[0])===String(c.v)?" selected":""}>${o[1]}</option>`).join("")}</select>`;
+      else if(c.tipo==="area") ctl = `<textarea id="${c.id}">${c.v}</textarea>`;
+      else if(c.tipo==="texto") ctl = `<input id="${c.id}" type="text" value="${c.v}">`;
+      else ctl = `<input id="${c.id}" type="number" step="any" value="${c.v}">`;
+      const et = `<label for="${c.id}">${c.txt}${c.u?` <span class="hint">[${c.u}]</span>`:""}${c.ayuda?`<small>${c.ayuda}</small>`:""}</label>`;
+      row.innerHTML = c.full ? et + ctl : et + ctl;
+      card.appendChild(row);
+    }
+    cont.appendChild(card);
+  }
+  $("suelo_modo").addEventListener("change", modoSuelo);
+  modoSuelo();
+}
+function modoSuelo(){
+  const w = $("suelo_modo").value === "wenner";
+  document.querySelectorAll('[data-grupo="uni"]').forEach(e=>e.style.display = "");
+  document.querySelectorAll('[data-grupo="wen"]').forEach(e=>e.style.display = w ? "" : "none");
+}
+function num(id){ const v = $(id).value.trim(); return v === "" ? null : Number(v); }
+
+function leerDatos(){
+  const d = {
+    proyecto: $("proyecto").value,
+    falla: {i_falla_ka:num("i_falla_ka"), sf:num("sf"), x_r:num("x_r"), frecuencia:num("frecuencia"), tf:num("tf"), cp:num("cp")},
+    descarga: {ts:num("ts"), peso:Number($("peso").value)},
+    conductor: {material:$("material").value, union:$("union").value, ta:num("ta"), diametro_mm:num("diametro_mm")},
+    malla: {lx:num("lx"), ly:num("ly"), nx:num("nx"), ny:num("ny"), h:num("h"),
+      varillas:{cantidad:num("v_cant")||0, largo:num("v_largo"), diametro_mm:num("v_diam"), en_perimetro:$("v_perim").value==="1"}},
+    metodo_rg: $("metodo_rg").value
+  };
+  if($("suelo_modo").value === "wenner"){
+    const filas = [];
+    for(const linea of $("wenner_txt").value.split("\n")){
+      const p = linea.split(/[,;\t ]+/).filter(Boolean).map(Number);
+      if(p.length >= 2 && p.every(isFinite)) filas.push({a:p[0], R:p[1]});
+    }
+    d.suelo = {wenner: filas, b: num("wenner_b")||0};
+    if(num("rho")) d.suelo.rho = num("rho");
+  } else d.suelo = {rho: num("rho")};
+  const rs = num("rho_s"), hs = num("hs");
+  if(rs && hs) d.capa_superficial = {rho_s: rs, hs: hs};
+  for(const k of Object.keys(d.falla)) if(d.falla[k]===null) delete d.falla[k];
+  for(const k of Object.keys(d.descarga)) if(d.descarga[k]===null) delete d.descarga[k];
+  return d;
+}
+function escribirDatos(d){
+  const set = (id,v)=>{ if(v!==undefined && v!==null) $(id).value = v; };
+  set("proyecto", d.proyecto);
+  const f = d.falla||{}; for(const k of ["i_falla_ka","sf","x_r","frecuencia","tf","cp"]) set(k, f[k]);
+  const de = d.descarga||{}; set("ts", de.ts); set("peso", String(de.peso||70));
+  const c = d.conductor||{}; set("material", c.material); set("union", c.union); set("ta", c.ta); set("diametro_mm", c.diametro_mm);
+  const m = d.malla||{}; for(const k of ["lx","ly","nx","ny","h"]) set(k, m[k]);
+  const v = m.varillas||{}; set("v_cant", v.cantidad||0); set("v_largo", v.largo); set("v_diam", v.diametro_mm); set("v_perim", v.en_perimetro===false?"0":"1");
+  set("metodo_rg", d.metodo_rg||"sverak");
+  const s = d.suelo||{};
+  if(s.wenner && s.wenner.length){
+    $("suelo_modo").value = "wenner";
+    $("wenner_txt").value = s.wenner.map(x=>x.a+", "+x.R).join("\n");
+    set("wenner_b", s.b||0);
+    $("rho").value = s.rho||"";
+  } else { $("suelo_modo").value = "uniforme"; set("rho", s.rho); }
+  const cs = d.capa_superficial||{}; $("rho_s").value = cs.rho_s||""; $("hs").value = cs.hs||"";
+  modoSuelo();
+}
+
+const fmt = (v, dec=2) => (Math.abs(v) >= 1000 ? v.toLocaleString("es-PE",{maximumFractionDigits:1}) : v.toLocaleString("es-PE",{maximumFractionDigits:dec}));
+const esc = s => String(s).replace(/[&<>]/g, c=>({"&":"&amp;","<":"&lt;",">":"&gt;"}[c]));
+
+function pintarResultados(r){
+  const R = $("resultados");
+  let h = `<div class="banner ${r.cumple?"ok":"bad"}">${r.cumple?"EL DISEÑO CUMPLE":"EL DISEÑO NO CUMPLE"}${r.proyecto?` <span style="font-weight:400;font-size:14px">· ${esc(r.proyecto)}</span>`:""}</div>`;
+  h += `<div class="kpis">
+    <div class="kpi"><span>Rg (${r.metodo_rg==="schwarz"?"Schwarz":"Sverak"})</span><b>${fmt(r.rg_ohm,3)} Ω</b></div>
+    <div class="kpi"><span>Corriente de malla IG</span><b>${fmt(r.ig_a,0)} A</b></div>
+    <div class="kpi"><span>GPR</span><b>${fmt(r.gpr_v,0)} V</b></div>
+    <div class="kpi"><span>Factor de decremento Df</span><b>${fmt(r.df,3)}</b></div></div>`;
+  h += `<div class="card"><h2>Verificaciones</h2>`;
+  for(const v of r.verificaciones){
+    const pct = Math.min(100, v.valor / v.limite * 100);
+    const col = v.cumple ? "var(--ok)" : "var(--bad)";
+    const inv = v.nombre.startsWith("Secci");
+    const pctg = inv ? Math.min(100, v.limite / v.valor * 100) : pct;
+    h += `<div class="ver"><div class="top"><span>${v.nombre}: <b>${fmt(v.valor)} ${v.unidad}</b> <span class="hint">(límite ${fmt(v.limite)} ${v.unidad}; ${v.criterio})</span></span><span class="tag ${v.cumple?"ok":"bad"}">${v.cumple?"CUMPLE":"NO CUMPLE"}</span></div><div class="gauge"><i style="width:${pctg}%;background:${col}"></i></div></div>`;
+  }
+  h += `<p class="hint">${esc(r.nota_gpr)}</p></div>`;
+  for(const a of r.advertencias) h += `<div class="warn">⚠ ${esc(a)}</div>`;
+  h += `<div class="card noprint"><h2>Acciones</h2><div class="bar">
+    <button id="btnBarrido">Probar más conductores (barrido)</button>
+    <button id="btnMd">Descargar memoria (.md)</button>
+    <button id="btnPdf">Imprimir / guardar PDF</button></div><div id="barrido"></div></div>`;
+  const m = r.extra && r.extra.modelo_dos_capas;
+  if(m){
+    h += `<div class="card"><h2>Modelo de suelo de dos capas (informativo)</h2>
+    <p class="hint">ρ1 = ${fmt(m.rho1)} Ω·m · ρ2 = ${fmt(m.rho2)} Ω·m · h = ${fmt(m.h)} m · error RMS ${fmt(m.error_rms_pct)} %. El ajuste no siempre es único: contrástalo con la curva medida.</p>
+    <table><tr><th class="n">a [m]</th><th class="n">ρ medida [Ω·m]</th><th class="n">ρ modelo [Ω·m]</th></tr>${m.detalle.map(x=>`<tr><td class="n">${fmt(x.a)}</td><td class="n">${fmt(x.rho_medida)}</td><td class="n">${fmt(x.rho_modelo)}</td></tr>`).join("")}</table></div>`;
+  }
+  h += `<div class="card"><h2>Memoria de cálculo</h2><table><tr><th>Símbolo</th><th>Descripción</th><th class="n">Valor</th><th>Unidad</th><th>Expresión</th></tr>${r.pasos.map(p=>`<tr><td>${esc(p.simbolo)}</td><td>${esc(p.nombre)}</td><td class="n">${fmt(p.valor,4)}</td><td>${esc(p.unidad)}</td><td class="f">${esc(p.formula)}</td></tr>`).join("")}</table></div>`;
+  R.innerHTML = h;
+  $("btnMd").onclick = () => descargar("memoria_calculo.md", r.memoria_md, "text/markdown");
+  $("btnPdf").onclick = () => window.print();
+  $("btnBarrido").onclick = barrido;
+}
+
+function grafico(filas, r){
+  const W = 560, H = 230, pl = 46, pr = 12, pt = 12, pb = 30;
+  const xs = filas.map(f=>f.n_conductores);
+  const ys = filas.flatMap(f=>[f.em,f.es]).concat([r.e_contacto_tol, r.e_paso_tol]);
+  const ymax = Math.max(...ys)*1.05, x0 = Math.min(...xs), x1 = Math.max(...xs);
+  const X = x => pl + (x-x0)/(x1-x0||1)*(W-pl-pr), Y = y => H-pb - y/ymax*(H-pt-pb);
+  const linea = (k,col)=>`<polyline fill="none" stroke="${col}" stroke-width="2" points="${filas.map(f=>X(f.n_conductores)+","+Y(f[k])).join(" ")}"/>`;
+  const lim = (y,col)=>`<line x1="${pl}" x2="${W-pr}" y1="${Y(y)}" y2="${Y(y)}" stroke="${col}" stroke-dasharray="5 4"/>`;
+  let ticks = "";
+  for(let i=0;i<=4;i++){ const y = ymax*i/4; ticks += `<line x1="${pl}" x2="${W-pr}" y1="${Y(y)}" y2="${Y(y)}" stroke="var(--line)"/><text x="${pl-6}" y="${Y(y)+4}" text-anchor="end">${Math.round(y)}</text>`; }
+  for(const x of xs) if((x-x0)%Math.max(1,Math.round((x1-x0)/8))===0) ticks += `<text x="${X(x)}" y="${H-10}" text-anchor="middle">${x}</text>`;
+  return `<svg viewBox="0 0 ${W} ${H}" width="100%" role="img" aria-label="Tensiones de malla y de paso según número de conductores">${ticks}
+    ${lim(r.e_contacto_tol,"#d9822b")}${lim(r.e_paso_tol,"#2b9d6b")}${linea("em","#1f5fbf")}${linea("es","#8a3ffc")}
+    <text x="${pl+4}" y="${pt+8}">Em (azul), Es (violeta), límites tolerables (punteado) · eje x: n.º de conductores por lado</text></svg>`;
+}
+
+async function barrido(){
+  const cont = $("barrido"); cont.innerHTML = '<p class="hint">Calculando…</p>';
+  await new Promise(r=>setTimeout(r,20));
+  const out = JSON.parse(py.runPython(`import tierra.api as a\na.barrido(${JSON.stringify(JSON.stringify(leerDatos()))}, 30)`));
+  if(out.error){ cont.innerHTML = `<div class="warn">${esc(out.error)}</div>`; return; }
+  const r = ultimo;
+  const p = out.primer_n_que_cumple;
+  let h = p ? `<p><b>Primera malla que cumple con geometría válida: ${p} × ${p} conductores.</b> Es una guía: confirma con el criterio de diseño y los demás datos.</p>`
+            : `<p><b>Ninguna configuración cuadrada n × n (3 a 30) cumple con geometría válida.</b> Considera varillas, mayor área o capa superficial más resistiva.</p>`;
+  h += grafico(out.filas, r);
+  h += `<table><tr><th class="n">n × n</th><th class="n">Rg [Ω]</th><th class="n">Em [V]</th><th class="n">Es [V]</th><th>Estado</th></tr>${out.filas.map(f=>`<tr><td class="n">${f.n_conductores}</td><td class="n">${fmt(f.rg,3)}</td><td class="n">${fmt(f.em,0)}</td><td class="n">${fmt(f.es,0)}</td><td>${f.cumple?'<span class="tag ok">cumple</span>':'<span class="tag bad">no cumple</span>'}${f.valida?"":' <span class="hint">(D ≤ 2.5 m: fuera de validez)</span>'}</td></tr>`).join("")}</table>`;
+  cont.innerHTML = h;
+}
+
+function descargar(nombre, texto, tipo){
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(new Blob([texto], {type: tipo+";charset=utf-8"}));
+  a.download = nombre; document.body.appendChild(a); a.click(); a.remove();
+}
+
+async function calcular(){
+  if(!py) return;
+  $("btnCalc").disabled = true; $("estado").textContent = "Calculando…";
+  await new Promise(r=>setTimeout(r,20));
+  try{
+    const out = JSON.parse(py.runPython(`import tierra.api as a\na.calcular(${JSON.stringify(JSON.stringify(leerDatos()))})`));
+    if(out.error){
+      $("resultados").innerHTML = `<div class="card"><h2>No se pudo calcular</h2><div class="warn">${esc(out.error)}</div></div>`;
+      $("estado").textContent = "";
+    } else { ultimo = out; pintarResultados(out); $("estado").textContent = ""; }
+  } catch(e){ $("estado").textContent = "Error inesperado: " + e; }
+  $("btnCalc").disabled = false;
+}
+
+async function iniciar(){
+  pintarCampos();
+  try{
+    py = await loadPyodide();
+    py.FS.mkdir("/tierra_pkg"); py.FS.mkdir("/tierra_pkg/tierra");
+    for(const [n, t] of Object.entries(FUENTES)) py.FS.writeFile("/tierra_pkg/tierra/"+n, t);
+    py.runPython("import sys; sys.path.insert(0, '/tierra_pkg')");
+    $("cargando").style.display = "none";
+    calcular();
+  } catch(e){
+    $("cargando").innerHTML = "<div>No se pudo cargar el motor de cálculo.</div><div class='hint'>Revisa tu conexión a internet y recarga la página. Detalle: " + esc(e) + "</div>";
+  }
+}
+$("btnCalc").onclick = calcular;
+$("btnEj").onclick = () => { escribirDatos(JSON.parse(py.runPython("import tierra.api as a\na.ejemplo()"))); calcular(); };
+$("btnGuardar").onclick = () => descargar("datos_malla.json", JSON.stringify(leerDatos(), null, 2), "application/json");
+$("btnAbrir").onclick = () => $("archivo").click();
+$("archivo").onchange = async e => { const f = e.target.files[0]; if(!f) return; try{ escribirDatos(JSON.parse(await f.text())); calcular(); }catch(err){ $("estado").textContent = "Archivo no válido: " + err; } e.target.value = ""; };
+iniciar();
+</script>
+</body>
+</html>

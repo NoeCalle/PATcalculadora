@@ -1,0 +1,312 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Calculadora de puesta a tierra</title>
+<style>
+:root{--bg:#f6f7f9;--card:#fff;--ink:#1d2330;--mut:#5d6677;--line:#dfe3ea;--acc:#1f5fbf;--ok:#16794a;--okbg:#e4f5ec;--bad:#b3261e;--badbg:#fdeceb;--warn:#8a5a00;--warnbg:#fff4de}
+@media (prefers-color-scheme:dark){:root{--bg:#14171d;--card:#1c2029;--ink:#e8ebf1;--mut:#9aa3b4;--line:#2d3340;--acc:#6ea2ff;--ok:#5fd39b;--okbg:#17332a;--bad:#ff8f87;--badbg:#3a1d1b;--warn:#f0c26a;--warnbg:#33290f}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+header{padding:20px 16px 8px;max-width:1200px;margin:0 auto}
+h1{font-size:22px;margin:0 0 4px}
+header p{margin:0;color:var(--mut)}
+main{max-width:1200px;margin:0 auto;padding:8px 16px 40px;display:grid;grid-template-columns:minmax(300px,420px) 1fr;gap:16px;align-items:start}
+@media (max-width:860px){main{grid-template-columns:1fr}}
+.card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:14px 16px;margin-bottom:14px}
+.card h2{font-size:15px;margin:0 0 10px;letter-spacing:.2px}
+.row{display:grid;grid-template-columns:1fr 110px;gap:8px;align-items:center;margin:6px 0}
+.row label{font-size:13.5px}
+.row small{display:block;color:var(--mut);font-size:12px}
+input,select,textarea{width:100%;padding:6px 8px;border:1px solid var(--line);border-radius:6px;background:var(--bg);color:var(--ink);font:inherit}
+textarea{min-height:90px;font-family:ui-monospace,Menlo,Consolas,monospace;font-size:13px}
+.row.full{grid-template-columns:1fr}
+button{font:inherit;padding:8px 14px;border-radius:8px;border:1px solid var(--line);background:var(--card);color:var(--ink);cursor:pointer}
+button.primary{background:var(--acc);border-color:var(--acc);color:#fff;font-weight:600}
+button:disabled{opacity:.5;cursor:wait}
+.bar{display:flex;gap:8px;flex-wrap:wrap;margin:6px 0 14px}
+#estado{color:var(--mut);font-size:13px;margin:4px 0 10px}
+.banner{padding:12px 16px;border-radius:10px;font-weight:700;font-size:17px;margin-bottom:14px}
+.banner.ok{background:var(--okbg);color:var(--ok)}
+.banner.bad{background:var(--badbg);color:var(--bad)}
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:10px;margin-bottom:14px}
+.kpi{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:10px 12px}
+.kpi b{display:block;font-size:20px}
+.kpi span{color:var(--mut);font-size:12.5px}
+.ver{margin:10px 0}
+.ver .top{display:flex;justify-content:space-between;font-size:13.5px;margin-bottom:4px}
+.gauge{height:10px;background:var(--line);border-radius:6px;overflow:hidden}
+.gauge i{display:block;height:100%}
+.tag{font-weight:700}
+.tag.ok{color:var(--ok)}.tag.bad{color:var(--bad)}
+.warn{background:var(--warnbg);color:var(--warn);border-radius:8px;padding:8px 12px;margin:6px 0;font-size:13.5px}
+table{width:100%;border-collapse:collapse;font-size:13px}
+th,td{padding:5px 6px;border-bottom:1px solid var(--line);text-align:left;vertical-align:top}
+td.n,th.n{text-align:right;font-variant-numeric:tabular-nums}
+td.f{color:var(--mut);font-family:ui-monospace,Menlo,Consolas,monospace;font-size:12px}
+.hint{color:var(--mut);font-size:12.5px}
+#cargando{position:fixed;inset:0;background:var(--bg);display:flex;align-items:center;justify-content:center;flex-direction:column;gap:10px;z-index:10}
+.spin{width:34px;height:34px;border:4px solid var(--line);border-top-color:var(--acc);border-radius:50%;animation:g 1s linear infinite}
+@keyframes g{to{transform:rotate(360deg)}}
+svg text{fill:var(--mut);font-size:11px}
+@media print{#cargando,.noprint,#form{display:none!important}main{display:block}body{background:#fff;color:#000}}
+</style>
+</head>
+<body>
+<div id="cargando"><div class="spin"></div><div>Cargando el motor de cálculo…</div><div class="hint">La primera vez necesita internet (unos segundos).</div></div>
+<header>
+  <h1>Calculadora de puesta a tierra de subestaciones</h1>
+  <p>Diseño de mallas según IEEE Std 80. Los cálculos corren en tu navegador; no se envía ningún dato.</p>
+</header>
+<main>
+  <section id="form">
+    <div class="bar noprint">
+      <button class="primary" id="btnCalc">Calcular</button>
+      <button id="btnEj">Cargar ejemplo</button>
+      <button id="btnGuardar">Guardar datos</button>
+      <button id="btnAbrir">Abrir datos…</button>
+      <input type="file" id="archivo" accept=".json" hidden>
+    </div>
+    <div id="estado"></div>
+    <div id="campos"></div>
+  </section>
+  <section id="resultados">
+    <div class="card"><h2>Resultados</h2><p class="hint">Completa los datos a la izquierda y pulsa <b>Calcular</b>.</p></div>
+  </section>
+</main>
+
+<script src="https://cdn.jsdelivr.net/pyodide/v0.26.4/full/pyodide.js"></script>
+<script>
+const FUENTES = {"__init__.py": "\"\"\"Calculadora de puesta a tierra de subestaciones segun IEEE Std 80.\"\"\"\n\nfrom .diseno import barrido_conductores, evaluar, memoria_markdown\nfrom .malla import Malla\n\n__all__ = [\"evaluar\", \"barrido_conductores\", \"memoria_markdown\", \"Malla\"]\n__version__ = \"0.1.0\"\n", "api.py": "\"\"\"Interfaz JSON-in / JSON-out. La usa la pagina web (Pyodide) y sirve para scripts.\"\"\"\n\nimport json\n\nfrom . import diseno, suelo\n\n\ndef _responder(fn):\n    try:\n        return json.dumps(fn(), ensure_ascii=False)\n    except ValueError as e:\n        return json.dumps({\"error\": str(e)}, ensure_ascii=False)\n    except (KeyError, TypeError) as e:\n        return json.dumps({\"error\": f\"Dato faltante o con formato invalido: {e}\"}, ensure_ascii=False)\n\n\ndef calcular(json_entrada):\n    \"\"\"Evalua un diseno. Devuelve JSON con resultados + memoria en Markdown.\"\"\"\n\n    def _f():\n        datos = json.loads(json_entrada)\n        r = diseno.evaluar(datos)\n        r[\"memoria_md\"] = diseno.memoria_markdown(r)\n        return r\n\n    return _responder(_f)\n\n\ndef barrido(json_entrada, n_max=30):\n    def _f():\n        datos = json.loads(json_entrada)\n        filas, primero = diseno.barrido_conductores(datos, n_max)\n        return {\"filas\": filas, \"primer_n_que_cumple\": primero}\n\n    return _responder(_f)\n\n\ndef ajustar_suelo(json_entrada):\n    \"\"\"Entrada: {\"b\": 0, \"wenner\": [{\"a\":..,\"R\":..}, ...]}\"\"\"\n\n    def _f():\n        d = json.loads(json_entrada)\n        b = float(d.get(\"b\", 0) or 0)\n        med = [(float(x[\"a\"]), suelo.rho_aparente_wenner(float(x[\"a\"]), float(x[\"R\"]), b)) for x in d[\"wenner\"]]\n        res = suelo.ajustar_dos_capas(med)\n        res[\"promedio\"] = suelo.rho_promedio(med)\n        return res\n\n    return _responder(_f)\n\n\ndef ejemplo():\n    return json.dumps(diseno.ESQUEMA_EJEMPLO, ensure_ascii=False, indent=2)\n", "conductor.py": "\"\"\"Seccion minima del conductor de la malla (ecuacion de Onderdonk segun IEEE 80).\"\"\"\n\nimport math\n\nfrom .materiales import TEMP_MAX_UNION, obtener\n\n\ndef seccion_minima_mm2(i_ka, tc, material=\"cobre_duro\", ta=40.0, union=\"soldadura_exotermica\"):\n    \"\"\"Seccion minima [mm2] para que el conductor soporte la corriente i_ka [kA]\n    durante tc [s] sin superar la temperatura maxima admisible.\n\n        A = I / sqrt( (TCAP*1e-4)/(tc*alpha_r*rho_r) * ln((K0+Tm)/(K0+Ta)) )\n\n    i_ka : corriente eficaz simetrica que circula por el conductor [kA]\n    tc   : duracion de la corriente [s]\n    ta   : temperatura ambiente [C]\n    union: tipo de union que limita la temperatura (ver TEMP_MAX_UNION)\n    \"\"\"\n    if i_ka <= 0 or tc <= 0:\n        raise ValueError(\"La corriente y el tiempo del conductor deben ser positivos.\")\n    mat = obtener(material)\n    if union not in TEMP_MAX_UNION:\n        raise ValueError(f\"Tipo de union desconocido: '{union}'. Opciones: {', '.join(TEMP_MAX_UNION)}\")\n    tm = TEMP_MAX_UNION[union] or mat.tm\n    tm = min(tm, mat.tm)\n    if tm <= ta:\n        raise ValueError(\"La temperatura maxima admisible debe ser mayor que la ambiente.\")\n    factor = (mat.tcap * 1e-4) / (tc * mat.alpha_r * mat.rho_r) * math.log((mat.k0 + tm) / (mat.k0 + ta))\n    return i_ka / math.sqrt(factor)\n\n\ndef diametro_desde_seccion_mm(a_mm2):\n    return math.sqrt(4.0 * a_mm2 / math.pi)\n\n\ndef seccion_desde_diametro_mm2(d_mm):\n    return math.pi * d_mm**2 / 4.0\n", "diseno.py": "\"\"\"Orquestador: evalua un diseno completo de malla segun el flujo de IEEE 80.\n\nEntrada: diccionario (ver ejemplos/*.json). Salida: diccionario con resultados,\nverificaciones, advertencias y los pasos de la memoria de calculo.\n\"\"\"\n\nimport copy\nimport math\n\nfrom . import conductor as cond\nfrom . import falla, suelo, tolerables\nfrom .malla import Malla\n\nESQUEMA_EJEMPLO = {\n    \"proyecto\": \"Ejemplo didactico: malla 70 x 70 m con 20 varillas\",\n    \"suelo\": {\"rho\": 400.0},\n    \"capa_superficial\": {\"rho_s\": 2500.0, \"hs\": 0.102},\n    \"falla\": {\"i_falla_ka\": 3.18, \"sf\": 0.6, \"x_r\": 10.0, \"frecuencia\": 60.0, \"tf\": 0.5, \"cp\": 1.0},\n    \"descarga\": {\"ts\": 0.5, \"peso\": 70},\n    \"conductor\": {\"material\": \"cobre_duro\", \"ta\": 40.0, \"union\": \"soldadura_exotermica\", \"diametro_mm\": 10.0},\n    \"malla\": {\n        \"lx\": 70.0, \"ly\": 70.0, \"nx\": 11, \"ny\": 11, \"h\": 0.5,\n        \"varillas\": {\"cantidad\": 20, \"largo\": 7.5, \"diametro_mm\": 16.0, \"en_perimetro\": True},\n    },\n    \"metodo_rg\": \"sverak\",\n}\n\n\ndef _paso(simbolo, nombre, valor, unidad, formula=\"\"):\n    return {\"simbolo\": simbolo, \"nombre\": nombre, \"valor\": valor, \"unidad\": unidad, \"formula\": formula}\n\n\ndef _num(d, clave, defecto=None, minimo=None, nombre=None):\n    v = d.get(clave, defecto)\n    if v is None:\n        raise ValueError(f\"Falta el dato '{nombre or clave}'.\")\n    try:\n        v = float(v)\n    except (TypeError, ValueError):\n        raise ValueError(f\"El dato '{nombre or clave}' debe ser un numero.\") from None\n    if not math.isfinite(v):\n        raise ValueError(f\"El dato '{nombre or clave}' no es un numero finito.\")\n    if minimo is not None and v <= minimo:\n        raise ValueError(f\"El dato '{nombre or clave}' debe ser mayor que {minimo:g}.\")\n    return v\n\n\ndef _construir_malla(m, d_mm):\n    v = m.get(\"varillas\") or {}\n    cantidad = int(_num(v, \"cantidad\", 0, nombre=\"varillas.cantidad\") if v else 0)\n    return Malla.rectangular(\n        lx=_num(m, \"lx\", minimo=0, nombre=\"malla.lx\"),\n        ly=_num(m, \"ly\", minimo=0, nombre=\"malla.ly\"),\n        nx=int(_num(m, \"nx\", minimo=1, nombre=\"malla.nx\")),\n        ny=int(_num(m, \"ny\", minimo=1, nombre=\"malla.ny\")),\n        h=_num(m, \"h\", minimo=0, nombre=\"malla.h\"),\n        d=d_mm / 1000.0,\n        n_varillas=cantidad,\n        l_varilla=_num(v, \"largo\", 0.0, nombre=\"varillas.largo\") if cantidad else 0.0,\n        d_varilla=_num(v, \"diametro_mm\", 16.0, nombre=\"varillas.diametro_mm\") / 1000.0,\n        varillas_perimetro=bool(v.get(\"en_perimetro\", True)),\n    )\n\n\ndef evaluar(datos):\n    \"\"\"Evalua el diseno. Lanza ValueError con mensaje en espanol si hay datos invalidos.\"\"\"\n    datos = copy.deepcopy(datos)\n    pasos, advertencias, extra = [], [], {}\n\n    # ---- suelo --------------------------------------------------------\n    s = datos.get(\"suelo\") or {}\n    if \"wenner\" in s and s[\"wenner\"]:\n        b = float(s.get(\"b\", 0.0) or 0.0)\n        med = []\n        for fila in s[\"wenner\"]:\n            a, r = _num(fila, \"a\", minimo=0, nombre=\"wenner.a\"), _num(fila, \"R\", minimo=0, nombre=\"wenner.R\")\n            med.append((a, suelo.rho_aparente_wenner(a, r, b)))\n        rho = float(s[\"rho\"]) if s.get(\"rho\") else suelo.rho_promedio(med)\n        extra[\"mediciones_rho_a\"] = [{\"a\": a, \"rho_a\": r} for a, r in med]\n        if len(med) >= 3:\n            try:\n                extra[\"modelo_dos_capas\"] = suelo.ajustar_dos_capas(med)\n            except ValueError:\n                pass\n        origen = \"promedio de las resistividades aparentes Wenner\" if not s.get(\"rho\") else \"valor ingresado por el usuario\"\n        pasos.append(_paso(\"rho\", f\"Resistividad de diseno ({origen})\", rho, \"ohm*m\", \"rho = promedio(rho_a)\"))\n    else:\n        rho = _num(s, \"rho\", minimo=0, nombre=\"suelo.rho\")\n        pasos.append(_paso(\"rho\", \"Resistividad del suelo\", rho, \"ohm*m\", \"dato\"))\n\n    cs_ = datos.get(\"capa_superficial\") or {}\n    rho_s = float(cs_[\"rho_s\"]) if cs_.get(\"rho_s\") else None\n    hs = float(cs_.get(\"hs\", 0.0) or 0.0)\n\n    # ---- falla --------------------------------------------------------\n    f = datos.get(\"falla\") or {}\n    tf = _num(f, \"tf\", minimo=0, nombre=\"falla.tf\")\n    x_r = _num(f, \"x_r\", 0.0, nombre=\"falla.x_r\")\n    frec = _num(f, \"frecuencia\", 60.0, minimo=0, nombre=\"falla.frecuencia\")\n    sf = _num(f, \"sf\", 1.0, minimo=0, nombre=\"falla.sf\")\n    cp = _num(f, \"cp\", 1.0, minimo=0, nombre=\"falla.cp\")\n    i_falla = _num(f, \"i_falla_ka\", minimo=0, nombre=\"falla.i_falla_ka\")\n    ta = falla.constante_tiempo_dc(x_r, frec)\n    df = falla.factor_decremento(tf, x_r, frec)\n    ig = falla.corriente_malla(i_falla, sf, df, cp)\n    pasos += [\n        _paso(\"Ta\", \"Constante de tiempo DC\", ta, \"s\", \"Ta = (X/R)/(2 pi f)\"),\n        _paso(\"Df\", \"Factor de decremento\", df, \"-\", \"Df = sqrt(1 + Ta/tf (1 - exp(-2 tf/Ta)))\"),\n        _paso(\"IG\", \"Corriente maxima de malla\", ig, \"A\", \"IG = Cp * Df * Sf * If\"),\n    ]\n\n    # ---- descarga y tensiones tolerables ------------------------------\n    de = datos.get(\"descarga\") or {}\n    ts = _num(de, \"ts\", tf, minimo=0, nombre=\"descarga.ts\")\n    peso = int(_num(de, \"peso\", 70, nombre=\"descarga.peso\"))\n    cs, e_paso_t, e_cont_t = tolerables.tensiones_tolerables(rho, ts, peso, rho_s, hs)\n    pasos += [\n        _paso(\"Cs\", \"Factor de capa superficial\", cs, \"-\", \"Cs = 1 - 0.09 (1 - rho/rho_s)/(2 hs + 0.09)\"),\n        _paso(\"E_paso,tol\", f\"Tension de paso tolerable ({peso} kg)\", e_paso_t, \"V\", \"(1000 + 6 Cs rho_s) k / sqrt(ts)\"),\n        _paso(\"E_cont,tol\", f\"Tension de contacto tolerable ({peso} kg)\", e_cont_t, \"V\", \"(1000 + 1.5 Cs rho_s) k / sqrt(ts)\"),\n    ]\n\n    # ---- conductor ----------------------------------------------------\n    c = datos.get(\"conductor\") or {}\n    material = c.get(\"material\", \"cobre_duro\")\n    ta_amb = _num(c, \"ta\", 40.0, nombre=\"conductor.ta\")\n    tc = _num(c, \"tc\", tf, minimo=0, nombre=\"conductor.tc\")\n    union = c.get(\"union\", \"soldadura_exotermica\")\n    d_mm = _num(c, \"diametro_mm\", minimo=0, nombre=\"conductor.diametro_mm\")\n    # Criterio conservador: el conductor se dimensiona con la corriente de falla\n    # completa 3I0 (sin factor de division Sf), porque un conductor puede quedar\n    # en serie con toda la corriente de falla.\n    a_min = cond.seccion_minima_mm2(i_falla, tc, material, ta_amb, union)\n    d_min = cond.diametro_desde_seccion_mm(a_min)\n    a_real = cond.seccion_desde_diametro_mm2(d_mm)\n    pasos += [\n        _paso(\"A_min\", \"Seccion minima del conductor\", a_min, \"mm2\",\n              \"A = I / sqrt((TCAP 1e-4)/(tc alpha_r rho_r) ln((K0+Tm)/(K0+Ta)))\"),\n        _paso(\"d_min\", \"Diametro minimo equivalente\", d_min, \"mm\", \"d = sqrt(4 A / pi)\"),\n    ]\n\n    # ---- malla --------------------------------------------------------\n    malla = _construir_malla(datos.get(\"malla\") or {}, d_mm)\n    advertencias += malla.advertencias()\n    metodo = datos.get(\"metodo_rg\", \"sverak\")\n    rg_sv = malla.rg_sverak(rho)\n    rg_sw = malla.rg_schwarz(rho)\n    rg = rg_sw if metodo == \"schwarz\" else rg_sv\n    em = malla.tension_malla(rho, ig)\n    es = malla.tension_paso(rho, ig)\n    gpr = ig * rg\n    pasos += [\n        _paso(\"A\", \"Area de la malla\", malla.area, \"m2\", \"A = Lx Ly\"),\n        _paso(\"Lc\", \"Longitud de conductor horizontal\", malla.lc, \"m\", \"Lc = nx Lx + ny Ly\"),\n        _paso(\"LR\", \"Longitud total de varillas\", malla.lr_total, \"m\", \"LR = N_var * L_var\"),\n        _paso(\"LT\", \"Longitud total enterrada\", malla.lt, \"m\", \"LT = Lc + LR\"),\n        _paso(\"D\", \"Espaciamiento entre conductores\", malla.d_sep, \"m\", \"promedio de los espaciamientos\"),\n        _paso(\"Rg (Sverak)\", \"Resistencia de malla\", rg_sv, \"ohm\", \"rho [1/LT + 1/sqrt(20A) (1 + 1/(1+h sqrt(20/A)))]\"),\n        _paso(\"Rg (Schwarz)\", \"Resistencia de malla (verificacion)\", rg_sw, \"ohm\", \"(R1 R2 - Rm^2)/(R1 + R2 - 2 Rm)\"),\n        _paso(\"GPR\", \"Elevacion de potencial de tierra\", gpr, \"V\", \"GPR = IG Rg\"),\n        _paso(\"n\", \"Numero efectivo de conductores\", malla.n, \"-\", \"n = na nb nc nd\"),\n        _paso(\"Ki\", \"Factor de irregularidad\", malla.ki, \"-\", \"Ki = 0.644 + 0.148 n\"),\n        _paso(\"Kii\", \"Factor de correccion por electrodos\", malla.kii, \"-\", \"1 con varillas perimetrales; si no 1/(2n)^(2/n)\"),\n        _paso(\"Kh\", \"Factor de profundidad\", malla.kh, \"-\", \"Kh = sqrt(1 + h/h0)\"),\n        _paso(\"Km\", \"Factor geometrico de malla\", malla.km, \"-\", \"ver IEEE 80\"),\n        _paso(\"Ks\", \"Factor geometrico de paso\", malla.ks, \"-\", \"ver IEEE 80\"),\n        _paso(\"LM\", \"Longitud efectiva para tension de malla\", malla.lm, \"m\", \"Lc + [1.55 + 1.22 Lr/sqrt(Lx^2+Ly^2)] LR\"),\n        _paso(\"Ls\", \"Longitud efectiva para tension de paso\", malla.ls, \"m\", \"Ls = 0.75 Lc + 0.85 LR\"),\n        _paso(\"Em\", \"Tension de malla\", em, \"V\", \"Em = rho Km Ki IG / LM\"),\n        _paso(\"Es\", \"Tension de paso\", es, \"V\", \"Es = rho Ks Ki IG / Ls\"),\n    ]\n\n    # ---- verificaciones -----------------------------------------------\n    verif = [\n        {\"nombre\": \"Seccion del conductor\", \"valor\": a_real, \"limite\": a_min, \"unidad\": \"mm2\",\n         \"cumple\": a_real >= a_min, \"criterio\": \"A_real >= A_min\"},\n        {\"nombre\": \"Tension de malla\", \"valor\": em, \"limite\": e_cont_t, \"unidad\": \"V\",\n         \"cumple\": em <= e_cont_t, \"criterio\": \"Em <= E_contacto,tol\"},\n        {\"nombre\": \"Tension de paso\", \"valor\": es, \"limite\": e_paso_t, \"unidad\": \"V\",\n         \"cumple\": es <= e_paso_t, \"criterio\": \"Es <= E_paso,tol\"},\n    ]\n    gpr_ok = gpr <= e_cont_t\n    info_gpr = (\"GPR <= E_contacto,tol: la malla cumple sin mas analisis (criterio de diseno inicial).\"\n                if gpr_ok else \"GPR > E_contacto,tol: se requiere verificar Em y Es (ya evaluados arriba).\")\n\n    return {\n        \"proyecto\": datos.get(\"proyecto\", \"\"),\n        \"metodo_rg\": metodo,\n        \"rho\": rho, \"cs\": cs, \"df\": df, \"ig_a\": ig, \"gpr_v\": gpr, \"rg_ohm\": rg,\n        \"rg_sverak\": rg_sv, \"rg_schwarz\": rg_sw,\n        \"e_malla\": em, \"e_paso\": es, \"e_contacto_tol\": e_cont_t, \"e_paso_tol\": e_paso_t,\n        \"a_min_mm2\": a_min, \"d_min_mm\": d_min,\n        \"n\": malla.n, \"km\": malla.km, \"ks\": malla.ks, \"ki\": malla.ki,\n        \"verificaciones\": verif,\n        \"cumple\": all(v[\"cumple\"] for v in verif),\n        \"nota_gpr\": info_gpr,\n        \"advertencias\": advertencias,\n        \"pasos\": pasos,\n        \"extra\": extra,\n    }\n\n\ndef barrido_conductores(datos, n_max=40):\n    \"\"\"Evalua el diseno variando nx = ny entre 3 y n_max. Devuelve lista de filas\n    {n_conductores, em, es, rg, cumple, valida} y el primer n que cumple con\n    geometria valida (o None).\"\"\"\n    filas, primero = [], None\n    for n in range(3, int(n_max) + 1):\n        d = copy.deepcopy(datos)\n        d[\"malla\"][\"nx\"] = n\n        d[\"malla\"][\"ny\"] = n\n        try:\n            r = evaluar(d)\n        except ValueError:\n            continue\n        # Km/Ks solo son validos con D > 2.5 m: esas filas se muestran pero no se proponen.\n        valida = not any(\"espaciamiento\" in a for a in r[\"advertencias\"])\n        ok = r[\"cumple\"]\n        filas.append({\"n_conductores\": n, \"em\": r[\"e_malla\"], \"es\": r[\"e_paso\"], \"rg\": r[\"rg_ohm\"],\n                      \"cumple\": ok, \"valida\": valida})\n        if ok and valida and primero is None:\n            primero = n\n    return filas, primero\n\n\ndef memoria_markdown(r):\n    \"\"\"Memoria de calculo en Markdown a partir del resultado de evaluar().\"\"\"\n    L = []\n    L.append(f\"# Memoria de calculo de malla de puesta a tierra\")\n    if r.get(\"proyecto\"):\n        L.append(f\"\\n**Proyecto:** {r['proyecto']}\")\n    L.append(\"\\nMetodologia: IEEE Std 80. Calculado con la calculadora de puesta a tierra (repositorio del libro).\\n\")\n    L.append(\"## Pasos de calculo\\n\")\n    L.append(\"| Simbolo | Descripcion | Valor | Unidad | Expresion |\")\n    L.append(\"|---|---|---:|---|---|\")\n    for p in r[\"pasos\"]:\n        v = p[\"valor\"]\n        txt = f\"{v:,.4f}\" if abs(v) < 1000 else f\"{v:,.1f}\"\n        L.append(f\"| {p['simbolo']} | {p['nombre']} | {txt} | {p['unidad']} | {p['formula']} |\")\n    L.append(\"\\n## Verificaciones\\n\")\n    L.append(\"| Verificacion | Valor | Limite | Criterio | Resultado |\")\n    L.append(\"|---|---:|---:|---|---|\")\n    for v in r[\"verificaciones\"]:\n        L.append(f\"| {v['nombre']} | {v['valor']:,.2f} {v['unidad']} | {v['limite']:,.2f} {v['unidad']} | {v['criterio']} | {'CUMPLE' if v['cumple'] else 'NO CUMPLE'} |\")\n    L.append(f\"\\n{r['nota_gpr']}\")\n    L.append(f\"\\n**Conclusion: {'EL DISENO CUMPLE' if r['cumple'] else 'EL DISENO NO CUMPLE'}**\")\n    if r[\"advertencias\"]:\n        L.append(\"\\n## Advertencias\\n\")\n        for a in r[\"advertencias\"]:\n            L.append(f\"- {a}\")\n    return \"\\n\".join(L) + \"\\n\"\n", "falla.py": "\"\"\"Corriente de falla, factor de decremento y corriente de malla (IEEE 80).\"\"\"\n\nimport math\n\n\ndef constante_tiempo_dc(x_r, f=60.0):\n    \"\"\"Ta = (X/R) / (2 pi f)  [s]\"\"\"\n    if x_r < 0 or f <= 0:\n        raise ValueError(\"X/R no puede ser negativo y la frecuencia debe ser positiva.\")\n    return x_r / (2.0 * math.pi * f)\n\n\ndef factor_decremento(tf, x_r, f=60.0):\n    \"\"\"Factor de decremento Df para una falla de duracion tf [s].\n\n        Df = sqrt( 1 + (Ta/tf) (1 - exp(-2 tf/Ta)) )\n    \"\"\"\n    if tf <= 0:\n        raise ValueError(\"La duracion de la falla tf debe ser positiva.\")\n    ta = constante_tiempo_dc(x_r, f)\n    if ta == 0:\n        return 1.0\n    return math.sqrt(1.0 + (ta / tf) * (1.0 - math.exp(-2.0 * tf / ta)))\n\n\ndef corriente_falla_monofasica(v_ll_kv, z1, z2, z0, rf=0.0):\n    \"\"\"Falla monofasica a tierra. Devuelve (3I0 [kA], X/R de la secuencia total).\n\n    z1, z2, z0: impedancias de secuencia [ohm] (numeros complejos o reales)\n    rf: resistencia de falla [ohm]\n        3I0 = 3 E / (Z1 + Z2 + Z0 + 3 Rf),  E = V_ll / sqrt(3)\n    \"\"\"\n    if v_ll_kv <= 0:\n        raise ValueError(\"La tension de linea debe ser positiva.\")\n    z = complex(z1) + complex(z2) + complex(z0) + 3.0 * rf\n    if abs(z) == 0:\n        raise ValueError(\"La impedancia total no puede ser cero.\")\n    i_ka = math.sqrt(3.0) * v_ll_kv / abs(z)\n    x_r = abs(z.imag) / z.real if z.real > 0 else float(\"inf\")\n    return i_ka, x_r\n\n\ndef corriente_malla(i_falla_ka, sf=1.0, df=1.0, cp=1.0):\n    \"\"\"Corriente maxima de malla IG [A].\n\n        IG = Cp * Df * Sf * If\n\n    i_falla_ka: corriente simetrica de falla a tierra 3I0 [kA]\n    sf: factor de division de corriente de falla (0..1)\n    df: factor de decremento\n    cp: factor de proyeccion de crecimiento del sistema (>= 1)\n    \"\"\"\n    if i_falla_ka <= 0:\n        raise ValueError(\"La corriente de falla debe ser positiva.\")\n    if not (0 < sf <= 1):\n        raise ValueError(\"El factor de division Sf debe estar entre 0 y 1.\")\n    if cp < 1:\n        raise ValueError(\"El factor de crecimiento Cp debe ser >= 1.\")\n    return cp * df * sf * i_falla_ka * 1000.0\n", "malla.py": "\"\"\"Geometria y ecuaciones de la malla de puesta a tierra (IEEE 80).\n\nTodas las longitudes en metros, resistividades en ohm*m, corrientes en A.\n\"\"\"\n\nimport math\nfrom dataclasses import dataclass\n\n\n@dataclass(frozen=True)\nclass Malla:\n    \"\"\"Geometria de la malla. Para mallas rectangulares usar Malla.rectangular().\"\"\"\n\n    area: float  # A  [m2]\n    perimetro: float  # Lp [m]\n    lc: float  # longitud total de conductor horizontal [m]\n    lx: float  # dimension maxima en x [m]\n    ly: float  # dimension maxima en y [m]\n    dm: float  # distancia maxima entre dos puntos de la malla [m]\n    d_sep: float  # espaciamiento entre conductores paralelos D [m]\n    h: float  # profundidad de enterramiento [m]\n    d: float  # diametro del conductor [m]\n    n_varillas: int = 0\n    l_varilla: float = 0.0  # longitud de cada varilla [m]\n    d_varilla: float = 0.016  # diametro de varilla [m]\n    varillas_perimetro: bool = True  # varillas en esquinas/perimetro\n\n    # ---- constructores -------------------------------------------------\n    @classmethod\n    def rectangular(cls, lx, ly, nx, ny, h, d, n_varillas=0, l_varilla=0.0,\n                    d_varilla=0.016, varillas_perimetro=True):\n        \"\"\"Malla rectangular lx x ly con nx conductores paralelos a x y ny paralelos a y.\n\n        D se toma como el promedio de los dos espaciamientos.\n        \"\"\"\n        if nx < 2 or ny < 2:\n            raise ValueError(\"Se necesitan al menos 2 conductores en cada direccion.\")\n        dx = lx / (ny - 1)\n        dy = ly / (nx - 1)\n        return cls(\n            area=lx * ly,\n            perimetro=2.0 * (lx + ly),\n            lc=nx * lx + ny * ly,\n            lx=lx,\n            ly=ly,\n            dm=math.hypot(lx, ly),\n            d_sep=(dx + dy) / 2.0,\n            h=h,\n            d=d,\n            n_varillas=n_varillas,\n            l_varilla=l_varilla,\n            d_varilla=d_varilla,\n            varillas_perimetro=varillas_perimetro,\n        )\n\n    def __post_init__(self):\n        for nombre in (\"area\", \"perimetro\", \"lc\", \"lx\", \"ly\", \"dm\", \"d_sep\", \"h\", \"d\"):\n            if getattr(self, nombre) <= 0:\n                raise ValueError(f\"El parametro de malla '{nombre}' debe ser positivo.\")\n        if self.n_varillas < 0:\n            raise ValueError(\"El numero de varillas no puede ser negativo.\")\n        if self.n_varillas > 0 and (self.l_varilla <= 0 or self.d_varilla <= 0):\n            raise ValueError(\"Con varillas, su longitud y diametro deben ser positivos.\")\n\n    # ---- magnitudes derivadas -----------------------------------------\n    @property\n    def lr_total(self):\n        \"\"\"LR: longitud total de varillas [m].\"\"\"\n        return self.n_varillas * self.l_varilla\n\n    @property\n    def lt(self):\n        \"\"\"LT = Lc + LR [m].\"\"\"\n        return self.lc + self.lr_total\n\n    @property\n    def n(self):\n        \"\"\"Numero efectivo de conductores paralelos n = na nb nc nd.\"\"\"\n        na = 2.0 * self.lc / self.perimetro\n        nb = math.sqrt(self.perimetro / (4.0 * math.sqrt(self.area)))\n        nc = (self.lx * self.ly / self.area) ** (0.7 * self.area / (self.lx * self.ly))\n        nd = self.dm / math.hypot(self.lx, self.ly)\n        return na * nb * nc * nd\n\n    @property\n    def lm(self):\n        \"\"\"Longitud efectiva LM para la tension de malla [m].\"\"\"\n        if self.n_varillas > 0 and self.varillas_perimetro:\n            return self.lc + (1.55 + 1.22 * self.l_varilla / math.hypot(self.lx, self.ly)) * self.lr_total\n        return self.lc + self.lr_total\n\n    @property\n    def ls(self):\n        \"\"\"Longitud efectiva Ls para la tension de paso [m].\"\"\"\n        return 0.75 * self.lc + 0.85 * self.lr_total\n\n    # ---- factores geometricos -----------------------------------------\n    @property\n    def ki(self):\n        \"\"\"Factor de correccion de irregularidad Ki = 0.644 + 0.148 n.\"\"\"\n        return 0.644 + 0.148 * self.n\n\n    @property\n    def kii(self):\n        \"\"\"Kii = 1 con varillas en esquinas/perimetro; si no, 1/(2n)^(2/n).\"\"\"\n        if self.n_varillas > 0 and self.varillas_perimetro:\n            return 1.0\n        n = self.n\n        return 1.0 / (2.0 * n) ** (2.0 / n)\n\n    @property\n    def kh(self):\n        \"\"\"Kh = sqrt(1 + h/h0), h0 = 1 m.\"\"\"\n        return math.sqrt(1.0 + self.h / 1.0)\n\n    @property\n    def km(self):\n        \"\"\"Factor geometrico para la tension de malla.\"\"\"\n        D, h, d, n = self.d_sep, self.h, self.d, self.n\n        termino1 = math.log(D**2 / (16.0 * h * d) + (D + 2.0 * h) ** 2 / (8.0 * D * d) - h / (4.0 * d))\n        termino2 = (self.kii / self.kh) * math.log(8.0 / (math.pi * (2.0 * n - 1.0)))\n        return (termino1 + termino2) / (2.0 * math.pi)\n\n    @property\n    def ks(self):\n        \"\"\"Factor geometrico para la tension de paso (h entre 0.25 y 2.5 m).\"\"\"\n        D, h, n = self.d_sep, self.h, self.n\n        return (1.0 / math.pi) * (1.0 / (2.0 * h) + 1.0 / (D + h) + (1.0 / D) * (1.0 - 0.5 ** (n - 2.0)))\n\n    # ---- resistencia de la malla --------------------------------------\n    def rg_sverak(self, rho):\n        \"\"\"Resistencia de malla, ecuacion de Sverak [ohm].\"\"\"\n        A, h, lt = self.area, self.h, self.lt\n        return rho * (1.0 / lt + (1.0 / math.sqrt(20.0 * A)) * (1.0 + 1.0 / (1.0 + h * math.sqrt(20.0 / A))))\n\n    def _k1k2(self):\n        \"\"\"Coeficientes de Schwarz, interpolados segun h/sqrt(A) entre 0, 1/10 y 1/6.\"\"\"\n        x = self.lx / self.ly  # relacion de lados Lx/Ly\n        t = self.h / math.sqrt(self.area)\n        puntos = [\n            (0.0, -0.04 * x + 1.41, 0.15 * x + 5.50),\n            (0.1, -0.05 * x + 1.20, 0.10 * x + 4.68),\n            (1.0 / 6.0, -0.05 * x + 1.13, 0.10 * x + 4.40),\n        ]\n        if t <= puntos[0][0]:\n            return puntos[0][1], puntos[0][2]\n        if t >= puntos[-1][0]:\n            return puntos[-1][1], puntos[-1][2]\n        for (t0, a0, b0), (t1, a1, b1) in zip(puntos, puntos[1:]):\n            if t0 <= t <= t1:\n                f = (t - t0) / (t1 - t0)\n                return a0 + f * (a1 - a0), b0 + f * (b1 - b0)\n\n    def rg_schwarz(self, rho):\n        \"\"\"Resistencia de malla con varillas, ecuaciones de Schwarz [ohm].\n\n        Comprobacion cruzada de Sverak. Los coeficientes k1, k2 se publican para\n        h = 0, h = sqrt(A)/10 y h = sqrt(A)/6; aqui se interpolan linealmente.\n        \"\"\"\n        A = self.area\n        r_cond = self.d / 2.0\n        a_eq = math.sqrt(r_cond * 2.0 * self.h)  # a' = sqrt(a * 2h) conductor enterrado\n        k1, k2 = self._k1k2()\n        lc = self.lc\n        r1 = rho / (math.pi * lc) * (math.log(2.0 * lc / a_eq) + k1 * lc / math.sqrt(A) - k2)\n        if self.n_varillas == 0:\n            return r1\n        nr, lr = self.n_varillas, self.l_varilla\n        b = self.d_varilla\n        r2 = rho / (2.0 * math.pi * nr * lr) * (\n            math.log(4.0 * lr / b) - 1.0 + 2.0 * k1 * lr / math.sqrt(A) * (math.sqrt(nr) - 1.0) ** 2\n        )\n        rm = rho / (math.pi * lc) * (math.log(2.0 * lc / lr) + k1 * lc / math.sqrt(A) - k2 + 1.0)\n        return (r1 * r2 - rm**2) / (r1 + r2 - 2.0 * rm)\n\n    # ---- tensiones ----------------------------------------------------\n    def tension_malla(self, rho, ig):\n        \"\"\"Tension de malla Em = rho Km Ki IG / LM [V].\"\"\"\n        return rho * self.km * self.ki * ig / self.lm\n\n    def tension_paso(self, rho, ig):\n        \"\"\"Tension de paso Es = rho Ks Ki IG / Ls [V].\"\"\"\n        return rho * self.ks * self.ki * ig / self.ls\n\n    def advertencias(self):\n        \"\"\"Limites de validez de las ecuaciones de Km/Ks y avisos geometricos.\"\"\"\n        av = []\n        if not (0.25 <= self.h <= 2.5):\n            av.append(f\"La profundidad h = {self.h:g} m esta fuera del rango 0.25-2.5 m de validez de Km/Ks.\")\n        if self.d_sep <= 2.5:\n            av.append(f\"El espaciamiento D = {self.d_sep:g} m es menor o igual que 2.5 m, fuera del rango de validez de Km/Ks.\")\n        if self.d >= 0.25 * self.d_sep:\n            av.append(\"El diametro del conductor excede 0.25 D: fuera del rango de validez de Km.\")\n        if self.lx > 0 and self.ly > 0 and max(self.lx, self.ly) / min(self.lx, self.ly) > 3:\n            av.append(\"Relacion de lados mayor que 3: Rg (Sverak) y los factores geometricos pierden precision.\")\n        return av\n", "materiales.py": "\"\"\"Constantes de materiales para el dimensionamiento del conductor de la malla.\n\nFuente de los valores: IEEE Std 80-2013, tabla de constantes de materiales\n(alpha_r, K0, Tm, rho_r, TCAP). IMPORTANTE: contrastar cada valor con la\nedicion de la norma que se cite en el libro antes de publicar; los valores\nestan centralizados aqui para que una correccion se haga en un solo lugar.\n\"\"\"\n\nfrom dataclasses import dataclass\n\n\n@dataclass(frozen=True)\nclass Material:\n    clave: str\n    nombre: str\n    alpha_r: float  # coeficiente termico de resistividad a 20 C [1/C]\n    k0: float  # 1/alpha_0 o (1/alpha_r - 20) a 0 C [C]\n    tm: float  # temperatura de fusion [C]\n    rho_r: float  # resistividad a 20 C [micro-ohm*cm]\n    tcap: float  # capacidad termica por unidad de volumen [J/(cm3*C)]\n\n\n_LISTA = [\n    Material(\"cobre_blando\", \"Cobre recocido trefilado blando (100 %)\", 0.00393, 234.0, 1083.0, 1.72, 3.42),\n    Material(\"cobre_duro\", \"Cobre trefilado duro comercial (97 %)\", 0.00381, 242.0, 1084.0, 1.78, 3.42),\n    Material(\"cobre_acero_40\", \"Alambre acero recubierto de cobre 40 %\", 0.00378, 245.0, 1084.0, 4.40, 3.846),\n    Material(\"cobre_acero_30\", \"Alambre acero recubierto de cobre 30 %\", 0.00378, 245.0, 1084.0, 5.86, 3.846),\n    Material(\"cobre_acero_20\", \"Varilla acero recubierta de cobre 20 %\", 0.00378, 245.0, 1084.0, 8.62, 3.846),\n    Material(\"aluminio_ec\", \"Aluminio grado EC\", 0.00403, 228.0, 657.0, 2.86, 2.556),\n    Material(\"aluminio_5005\", \"Aluminio aleacion 5005\", 0.00353, 263.0, 652.0, 3.22, 2.598),\n    Material(\"aluminio_6201\", \"Aluminio aleacion 6201\", 0.00347, 268.0, 654.0, 3.28, 2.598),\n    Material(\"aluminio_acero_20\", \"Acero recubierto de aluminio 20.3 %\", 0.00360, 258.0, 657.0, 8.48, 3.58),\n    Material(\"acero_1020\", \"Acero 1020\", 0.00160, 605.0, 1510.0, 15.90, 3.28),\n    Material(\"acero_inox_recub_20\", \"Acero recubierto de acero inoxidable 20.3 %\", 0.00160, 605.0, 1400.0, 17.50, 3.28),\n    Material(\"acero_zincado\", \"Varilla de acero cincada (galvanizada)\", 0.00320, 293.0, 419.0, 72.00, 3.931),\n    Material(\"acero_inox_304\", \"Acero inoxidable 304\", 0.00130, 749.0, 1400.0, 72.00, 4.032),\n]\n\nMATERIALES = {m.clave: m for m in _LISTA}\n\n# Temperatura maxima admisible segun el tipo de union (C). None = usar Tm del conductor.\nTEMP_MAX_UNION = {\n    \"soldadura_exotermica\": None,\n    \"soldadura_fuerte\": 450.0,\n    \"conector_mecanico\": 250.0,\n}\n\n\ndef obtener(clave: str) -> Material:\n    try:\n        return MATERIALES[clave]\n    except KeyError:\n        raise ValueError(\n            f\"Material desconocido: '{clave}'. Opciones: {', '.join(MATERIALES)}\"\n        ) from None\n", "suelo.py": "\"\"\"Resistividad del suelo: metodo de Wenner y modelo de dos capas (Sunde).\"\"\"\n\nimport math\n\n\ndef rho_aparente_wenner(a, resistencia, b=0.0):\n    \"\"\"Resistividad aparente [ohm*m] de una medicion Wenner.\n\n    a: separacion entre electrodos [m]; resistencia: R medida [ohm]\n    b: profundidad de enterramiento de los electrodos [m]\n       b = 0  ->  rho_a = 2 pi a R\n       b > 0  ->  formula completa de Wenner\n    \"\"\"\n    if a <= 0 or resistencia <= 0:\n        raise ValueError(\"La separacion a y la resistencia medida deben ser positivas.\")\n    if b <= 0:\n        return 2.0 * math.pi * a * resistencia\n    den = 1.0 + 2.0 * a / math.sqrt(a * a + 4.0 * b * b) - a / math.sqrt(a * a + b * b)\n    return 4.0 * math.pi * a * resistencia / den\n\n\ndef rho_aparente_dos_capas(rho1, rho2, h, a):\n    \"\"\"Resistividad aparente Wenner [ohm*m] sobre un suelo de dos capas.\n\n        rho_a = rho1 [ 1 + 4 sum_{n>=1} K^n ( 1/sqrt(1+(2nh/a)^2) - 1/sqrt(4+(2nh/a)^2) ) ]\n        K = (rho2 - rho1)/(rho2 + rho1)\n    \"\"\"\n    k = (rho2 - rho1) / (rho2 + rho1)\n    if abs(k) < 1e-12:\n        return rho1\n    suma = 0.0\n    n = 1\n    while n < 20000:\n        x = 2.0 * n * h / a\n        termino = (k**n) * (1.0 / math.sqrt(1.0 + x * x) - 1.0 / math.sqrt(4.0 + x * x))\n        suma += termino\n        if n >= 3 and abs(termino) < 1e-9 * max(1.0, abs(suma)):\n            break\n        n += 1\n    return rho1 * (1.0 + 4.0 * suma)\n\n\ndef rho_promedio(mediciones):\n    \"\"\"Promedio aritmetico de las resistividades aparentes [(a, rho_a), ...].\"\"\"\n    if not mediciones:\n        raise ValueError(\"No hay mediciones.\")\n    return sum(r for _, r in mediciones) / len(mediciones)\n\n\ndef ajustar_dos_capas(mediciones, razon_max=50.0):\n    \"\"\"Ajusta (rho1, rho2, h) a mediciones Wenner [(a, rho_a), ...].\n\n    Busqueda en malla logaritmica + refinamiento por busqueda de patron,\n    minimizando el error cuadratico de los logaritmos. El ajuste de un suelo\n    de dos capas no siempre es unico: revisar el resultado contra la curva\n    medida y el criterio del ingeniero.\n\n    Devuelve dict con rho1, rho2, h, error_rms_pct y la comparacion punto a punto.\n    \"\"\"\n    if len(mediciones) < 3:\n        raise ValueError(\"Se necesitan al menos 3 mediciones para ajustar dos capas.\")\n    datos = sorted((float(a), float(r)) for a, r in mediciones)\n    amin, amax = datos[0][0], datos[-1][0]\n    rmin = min(r for _, r in datos)\n    rmax = max(r for _, r in datos)\n    logs = [math.log(r) for _, r in datos]\n\n    def error(p):\n        r1, r2, h = math.exp(p[0]), math.exp(p[1]), math.exp(p[2])\n        razon = r2 / r1\n        if razon > razon_max or razon < 1.0 / razon_max:\n            return 1e9\n        e = 0.0\n        for (a, _), lr in zip(datos, logs):\n            e += (math.log(rho_aparente_dos_capas(r1, r2, h, a)) - lr) ** 2\n        return e\n\n    def geom(lo, hi, n):\n        return [math.exp(math.log(lo) + (math.log(hi) - math.log(lo)) * i / (n - 1)) for i in range(n)]\n\n    mejor, p_mejor = 1e18, None\n    for r1 in geom(rmin * 0.5, rmax * 1.5, 10):\n        for r2 in geom(rmin * 0.2, rmax * 5.0, 12):\n            for h in geom(amin * 0.3, amax * 2.0, 14):\n                p = (math.log(r1), math.log(r2), math.log(h))\n                e = error(p)\n                if e < mejor:\n                    mejor, p_mejor = e, p\n\n    paso = 0.3\n    p = list(p_mejor)\n    for _ in range(80):\n        mejoro = False\n        for i in range(3):\n            for s in (+paso, -paso):\n                q = list(p)\n                q[i] += s\n                e = error(q)\n                if e < mejor:\n                    mejor, p, mejoro = e, q, True\n        if not mejoro:\n            paso *= 0.5\n            if paso < 1e-4:\n                break\n\n    r1, r2, h = math.exp(p[0]), math.exp(p[1]), math.exp(p[2])\n    detalle = []\n    for a, r in datos:\n        m = rho_aparente_dos_capas(r1, r2, h, a)\n        detalle.append({\"a\": a, \"rho_medida\": r, \"rho_modelo\": m})\n    rms = math.sqrt(mejor / len(datos)) * 100.0\n    return {\"rho1\": r1, \"rho2\": r2, \"h\": h, \"error_rms_pct\": rms, \"detalle\": detalle}\n", "tolerables.py": "\"\"\"Tensiones tolerables de paso y contacto (IEEE 80).\"\"\"\n\nimport math\n\n_K = {50: 0.116, 70: 0.157}\n\n\ndef factor_cs(rho, rho_s=None, hs=0.0):\n    \"\"\"Factor de reduccion de la capa superficial Cs.\n\n        Cs = 1 - 0.09 (1 - rho/rho_s) / (2 hs + 0.09)\n\n    Sin capa superficial (rho_s None, igual a rho o hs = 0) Cs = 1.\n    \"\"\"\n    if rho <= 0:\n        raise ValueError(\"La resistividad del suelo debe ser positiva.\")\n    if rho_s is None or hs <= 0 or rho_s == rho:\n        return 1.0\n    if rho_s <= 0:\n        raise ValueError(\"La resistividad de la capa superficial debe ser positiva.\")\n    return 1.0 - 0.09 * (1.0 - rho / rho_s) / (2.0 * hs + 0.09)\n\n\ndef tensiones_tolerables(rho, ts, peso=70, rho_s=None, hs=0.0):\n    \"\"\"Devuelve (Cs, E_paso, E_contacto) en voltios.\n\n        E_paso     = (1000 + 6   Cs rho_s) k / sqrt(ts)\n        E_contacto = (1000 + 1.5 Cs rho_s) k / sqrt(ts)\n\n    k = 0.116 (peso 50 kg) o 0.157 (peso 70 kg). Sin capa superficial rho_s = rho.\n    \"\"\"\n    if ts <= 0:\n        raise ValueError(\"La duracion de la descarga ts debe ser positiva.\")\n    if peso not in _K:\n        raise ValueError(\"El peso corporal debe ser 50 o 70 kg.\")\n    cs = factor_cs(rho, rho_s, hs)\n    rs = rho if (rho_s is None or hs <= 0) else rho_s\n    k = _K[peso]\n    e_paso = (1000.0 + 6.0 * cs * rs) * k / math.sqrt(ts)\n    e_contacto = (1000.0 + 1.5 * cs * rs) * k / math.sqrt(ts)\n    return cs, e_paso, e_contacto\n"};
+const MATERIALES = [["cobre_blando", "Cobre recocido trefilado blando (100 %)"], ["cobre_duro", "Cobre trefilado duro comercial (97 %)"], ["cobre_acero_40", "Alambre acero recubierto de cobre 40 %"], ["cobre_acero_30", "Alambre acero recubierto de cobre 30 %"], ["cobre_acero_20", "Varilla acero recubierta de cobre 20 %"], ["aluminio_ec", "Aluminio grado EC"], ["aluminio_5005", "Aluminio aleacion 5005"], ["aluminio_6201", "Aluminio aleacion 6201"], ["aluminio_acero_20", "Acero recubierto de aluminio 20.3 %"], ["acero_1020", "Acero 1020"], ["acero_inox_recub_20", "Acero recubierto de acero inoxidable 20.3 %"], ["acero_zincado", "Varilla de acero cincada (galvanizada)"], ["acero_inox_304", "Acero inoxidable 304"]];
+const UNIONES = [["soldadura_exotermica","Soldadura exotérmica (límite: fusión del conductor)"],["soldadura_fuerte","Soldadura fuerte (450 °C)"],["conector_mecanico","Conector mecánico (250 °C)"]];
+
+const GRUPOS = [
+ {t:"Proyecto", campos:[{id:"proyecto", txt:"Nombre del proyecto", tipo:"texto", v:"Ejemplo didactico: malla 70 x 70 m con 20 varillas"}]},
+ {t:"Suelo", campos:[
+   {id:"suelo_modo", txt:"Origen de la resistividad", tipo:"sel", op:[["uniforme","Valor conocido"],["wenner","Mediciones Wenner"]], v:"uniforme"},
+   {id:"rho", txt:"Resistividad ρ", u:"Ω·m", v:400, ayuda:"Con Wenner: vacío = promedio de las mediciones", grupo:"uni"},
+   {id:"wenner_b", txt:"Profundidad de electrodos b", u:"m", v:0, grupo:"wen"},
+   {id:"wenner_txt", txt:"Mediciones (una por línea: a [m], R [Ω])", tipo:"area", v:"1, 63.7\n2, 31.8\n4, 15.9\n8, 7.96\n16, 3.98", grupo:"wen", full:true}]},
+ {t:"Capa superficial (grava)", campos:[
+   {id:"rho_s", txt:"Resistividad de la capa ρs", u:"Ω·m", v:2500, ayuda:"Vacío o 0 = sin capa"},
+   {id:"hs", txt:"Espesor hs", u:"m", v:0.102}]},
+ {t:"Falla", campos:[
+   {id:"i_falla_ka", txt:"Corriente simétrica de falla 3I0", u:"kA", v:3.18},
+   {id:"sf", txt:"Factor de división Sf", v:0.6, ayuda:"1 = toda la corriente a la malla (conservador)"},
+   {id:"x_r", txt:"Relación X/R", v:10},
+   {id:"frecuencia", txt:"Frecuencia", u:"Hz", v:60},
+   {id:"tf", txt:"Duración de la falla tf", u:"s", v:0.5},
+   {id:"cp", txt:"Factor de crecimiento Cp", v:1}]},
+ {t:"Persona y descarga", campos:[
+   {id:"ts", txt:"Duración de la descarga ts", u:"s", v:0.5, ayuda:"Normalmente igual a tf"},
+   {id:"peso", txt:"Peso corporal", tipo:"sel", op:[["70","70 kg"],["50","50 kg"]], v:"70"}]},
+ {t:"Conductor", campos:[
+   {id:"material", txt:"Material", tipo:"sel", op:MATERIALES, v:"cobre_duro"},
+   {id:"union", txt:"Tipo de unión", tipo:"sel", op:UNIONES, v:"soldadura_exotermica"},
+   {id:"ta", txt:"Temperatura ambiente", u:"°C", v:40},
+   {id:"diametro_mm", txt:"Diámetro del conductor", u:"mm", v:10}]},
+ {t:"Malla", campos:[
+   {id:"lx", txt:"Longitud Lx", u:"m", v:70},
+   {id:"ly", txt:"Longitud Ly", u:"m", v:70},
+   {id:"nx", txt:"N.º de conductores paralelos a x", v:11},
+   {id:"ny", txt:"N.º de conductores paralelos a y", v:11},
+   {id:"h", txt:"Profundidad h", u:"m", v:0.5},
+   {id:"metodo_rg", txt:"Método para Rg", tipo:"sel", op:[["sverak","Sverak"],["schwarz","Schwarz"]], v:"sverak"}]},
+ {t:"Varillas (opcional)", campos:[
+   {id:"v_cant", txt:"Cantidad", v:20},
+   {id:"v_largo", txt:"Longitud de cada una", u:"m", v:7.5},
+   {id:"v_diam", txt:"Diámetro", u:"mm", v:16},
+   {id:"v_perim", txt:"Ubicación", tipo:"sel", op:[["1","Esquinas / perímetro"],["0","Solo interior"]], v:"1"}]}
+];
+
+const $ = id => document.getElementById(id);
+let py = null, ultimo = null;
+
+function pintarCampos(){
+  const cont = $("campos");
+  cont.innerHTML = "";
+  for(const g of GRUPOS){
+    const card = document.createElement("div"); card.className = "card";
+    card.innerHTML = `<h2>${g.t}</h2>`;
+    for(const c of g.campos){
+      const row = document.createElement("div");
+      row.className = "row" + (c.full ? " full" : "");
+      if(c.grupo) row.dataset.grupo = c.grupo;
+      let ctl;
+      if(c.tipo==="sel") ctl = `<select id="${c.id}">${c.op.map(o=>`<option value="${o[0]}"${String(o[0])===String(c.v)?" selected":""}>${o[1]}</option>`).join("")}</select>`;
+      else if(c.tipo==="area") ctl = `<textarea id="${c.id}">${c.v}</textarea>`;
+      else if(c.tipo==="texto") ctl = `<input id="${c.id}" type="text" value="${c.v}">`;
+      else ctl = `<input id="${c.id}" type="number" step="any" value="${c.v}">`;
+      const et = `<label for="${c.id}">${c.txt}${c.u?` <span class="hint">[${c.u}]</span>`:""}${c.ayuda?`<small>${c.ayuda}</small>`:""}</label>`;
+      row.innerHTML = c.full ? et + ctl : et + ctl;
+      card.appendChild(row);
+    }
+    cont.appendChild(card);
+  }
+  $("suelo_modo").addEventListener("change", modoSuelo);
+  modoSuelo();
+}
+function modoSuelo(){
+  const w = $("suelo_modo").value === "wenner";
+  document.querySelectorAll('[data-grupo="uni"]').forEach(e=>e.style.display = "");
+  document.querySelectorAll('[data-grupo="wen"]').forEach(e=>e.style.display = w ? "" : "none");
+}
+function num(id){ const v = $(id).value.trim(); return v === "" ? null : Number(v); }
+
+function leerDatos(){
+  const d = {
+    proyecto: $("proyecto").value,
+    falla: {i_falla_ka:num("i_falla_ka"), sf:num("sf"), x_r:num("x_r"), frecuencia:num("frecuencia"), tf:num("tf"), cp:num("cp")},
+    descarga: {ts:num("ts"), peso:Number($("peso").value)},
+    conductor: {material:$("material").value, union:$("union").value, ta:num("ta"), diametro_mm:num("diametro_mm")},
+    malla: {lx:num("lx"), ly:num("ly"), nx:num("nx"), ny:num("ny"), h:num("h"),
+      varillas:{cantidad:num("v_cant")||0, largo:num("v_largo"), diametro_mm:num("v_diam"), en_perimetro:$("v_perim").value==="1"}},
+    metodo_rg: $("metodo_rg").value
+  };
+  if($("suelo_modo").value === "wenner"){
+    const filas = [];
+    for(const linea of $("wenner_txt").value.split("\n")){
+      const p = linea.split(/[,;\t ]+/).filter(Boolean).map(Number);
+      if(p.length >= 2 && p.every(isFinite)) filas.push({a:p[0], R:p[1]});
+    }
+    d.suelo = {wenner: filas, b: num("wenner_b")||0};
+    if(num("rho")) d.suelo.rho = num("rho");
+  } else d.suelo = {rho: num("rho")};
+  const rs = num("rho_s"), hs = num("hs");
+  if(rs && hs) d.capa_superficial = {rho_s: rs, hs: hs};
+  for(const k of Object.keys(d.falla)) if(d.falla[k]===null) delete d.falla[k];
+  for(const k of Object.keys(d.descarga)) if(d.descarga[k]===null) delete d.descarga[k];
+  return d;
+}
+function escribirDatos(d){
+  const set = (id,v)=>{ if(v!==undefined && v!==null) $(id).value = v; };
+  set("proyecto", d.proyecto);
+  const f = d.falla||{}; for(const k of ["i_falla_ka","sf","x_r","frecuencia","tf","cp"]) set(k, f[k]);
+  const de = d.descarga||{}; set("ts", de.ts); set("peso", String(de.peso||70));
+  const c = d.conductor||{}; set("material", c.material); set("union", c.union); set("ta", c.ta); set("diametro_mm", c.diametro_mm);
+  const m = d.malla||{}; for(const k of ["lx","ly","nx","ny","h"]) set(k, m[k]);
+  const v = m.varillas||{}; set("v_cant", v.cantidad||0); set("v_largo", v.largo); set("v_diam", v.diametro_mm); set("v_perim", v.en_perimetro===false?"0":"1");
+  set("metodo_rg", d.metodo_rg||"sverak");
+  const s = d.suelo||{};
+  if(s.wenner && s.wenner.length){
+    $("suelo_modo").value = "wenner";
+    $("wenner_txt").value = s.wenner.map(x=>x.a+", "+x.R).join("\n");
+    set("wenner_b", s.b||0);
+    $("rho").value = s.rho||"";
+  } else { $("suelo_modo").value = "uniforme"; set("rho", s.rho); }
+  const cs = d.capa_superficial||{}; $("rho_s").value = cs.rho_s||""; $("hs").value = cs.hs||"";
+  modoSuelo();
+}
+
+const fmt = (v, dec=2) => (Math.abs(v) >= 1000 ? v.toLocaleString("es-PE",{maximumFractionDigits:1}) : v.toLocaleString("es-PE",{maximumFractionDigits:dec}));
+const esc = s => String(s).replace(/[&<>]/g, c=>({"&":"&amp;","<":"&lt;",">":"&gt;"}[c]));
+
+function pintarResultados(r){
+  const R = $("resultados");
+  let h = `<div class="banner ${r.cumple?"ok":"bad"}">${r.cumple?"EL DISEÑO CUMPLE":"EL DISEÑO NO CUMPLE"}${r.proyecto?` <span style="font-weight:400;font-size:14px">· ${esc(r.proyecto)}</span>`:""}</div>`;
+  h += `<div class="kpis">
+    <div class="kpi"><span>Rg (${r.metodo_rg==="schwarz"?"Schwarz":"Sverak"})</span><b>${fmt(r.rg_ohm,3)} Ω</b></div>
+    <div class="kpi"><span>Corriente de malla IG</span><b>${fmt(r.ig_a,0)} A</b></div>
+    <div class="kpi"><span>GPR</span><b>${fmt(r.gpr_v,0)} V</b></div>
+    <div class="kpi"><span>Factor de decremento Df</span><b>${fmt(r.df,3)}</b></div></div>`;
+  h += `<div class="card"><h2>Verificaciones</h2>`;
+  for(const v of r.verificaciones){
+    const pct = Math.min(100, v.valor / v.limite * 100);
+    const col = v.cumple ? "var(--ok)" : "var(--bad)";
+    const inv = v.nombre.startsWith("Secci");
+    const pctg = inv ? Math.min(100, v.limite / v.valor * 100) : pct;
+    h += `<div class="ver"><div class="top"><span>${v.nombre}: <b>${fmt(v.valor)} ${v.unidad}</b> <span class="hint">(límite ${fmt(v.limite)} ${v.unidad}; ${v.criterio})</span></span><span class="tag ${v.cumple?"ok":"bad"}">${v.cumple?"CUMPLE":"NO CUMPLE"}</span></div><div class="gauge"><i style="width:${pctg}%;background:${col}"></i></div></div>`;
+  }
+  h += `<p class="hint">${esc(r.nota_gpr)}</p></div>`;
+  for(const a of r.advertencias) h += `<div class="warn">⚠ ${esc(a)}</div>`;
+  h += `<div class="card noprint"><h2>Acciones</h2><div class="bar">
+    <button id="btnBarrido">Probar más conductores (barrido)</button>
+    <button id="btnMd">Descargar memoria (.md)</button>
+    <button id="btnPdf">Imprimir / guardar PDF</button></div><div id="barrido"></div></div>`;
+  const m = r.extra && r.extra.modelo_dos_capas;
+  if(m){
+    h += `<div class="card"><h2>Modelo de suelo de dos capas (informativo)</h2>
+    <p class="hint">ρ1 = ${fmt(m.rho1)} Ω·m · ρ2 = ${fmt(m.rho2)} Ω·m · h = ${fmt(m.h)} m · error RMS ${fmt(m.error_rms_pct)} %. El ajuste no siempre es único: contrástalo con la curva medida.</p>
+    <table><tr><th class="n">a [m]</th><th class="n">ρ medida [Ω·m]</th><th class="n">ρ modelo [Ω·m]</th></tr>${m.detalle.map(x=>`<tr><td class="n">${fmt(x.a)}</td><td class="n">${fmt(x.rho_medida)}</td><td class="n">${fmt(x.rho_modelo)}</td></tr>`).join("")}</table></div>`;
+  }
+  h += `<div class="card"><h2>Memoria de cálculo</h2><table><tr><th>Símbolo</th><th>Descripción</th><th class="n">Valor</th><th>Unidad</th><th>Expresión</th></tr>${r.pasos.map(p=>`<tr><td>${esc(p.simbolo)}</td><td>${esc(p.nombre)}</td><td class="n">${fmt(p.valor,4)}</td><td>${esc(p.unidad)}</td><td class="f">${esc(p.formula)}</td></tr>`).join("")}</table></div>`;
+  R.innerHTML = h;
+  $("btnMd").onclick = () => descargar("memoria_calculo.md", r.memoria_md, "text/markdown");
+  $("btnPdf").onclick = () => window.print();
+  $("btnBarrido").onclick = barrido;
+}
+
+function grafico(filas, r){
+  const W = 560, H = 230, pl = 46, pr = 12, pt = 12, pb = 30;
+  const xs = filas.map(f=>f.n_conductores);
+  const ys = filas.flatMap(f=>[f.em,f.es]).concat([r.e_contacto_tol, r.e_paso_tol]);
+  const ymax = Math.max(...ys)*1.05, x0 = Math.min(...xs), x1 = Math.max(...xs);
+  const X = x => pl + (x-x0)/(x1-x0||1)*(W-pl-pr), Y = y => H-pb - y/ymax*(H-pt-pb);
+  const linea = (k,col)=>`<polyline fill="none" stroke="${col}" stroke-width="2" points="${filas.map(f=>X(f.n_conductores)+","+Y(f[k])).join(" ")}"/>`;
+  const lim = (y,col)=>`<line x1="${pl}" x2="${W-pr}" y1="${Y(y)}" y2="${Y(y)}" stroke="${col}" stroke-dasharray="5 4"/>`;
+  let ticks = "";
+  for(let i=0;i<=4;i++){ const y = ymax*i/4; ticks += `<line x1="${pl}" x2="${W-pr}" y1="${Y(y)}" y2="${Y(y)}" stroke="var(--line)"/><text x="${pl-6}" y="${Y(y)+4}" text-anchor="end">${Math.round(y)}</text>`; }
+  for(const x of xs) if((x-x0)%Math.max(1,Math.round((x1-x0)/8))===0) ticks += `<text x="${X(x)}" y="${H-10}" text-anchor="middle">${x}</text>`;
+  return `<svg viewBox="0 0 ${W} ${H}" width="100%" role="img" aria-label="Tensiones de malla y de paso según número de conductores">${ticks}
+    ${lim(r.e_contacto_tol,"#d9822b")}${lim(r.e_paso_tol,"#2b9d6b")}${linea("em","#1f5fbf")}${linea("es","#8a3ffc")}
+    <text x="${pl+4}" y="${pt+8}">Em (azul), Es (violeta), límites tolerables (punteado) · eje x: n.º de conductores por lado</text></svg>`;
+}
+
+async function barrido(){
+  const cont = $("barrido"); cont.innerHTML = '<p class="hint">Calculando…</p>';
+  await new Promise(r=>setTimeout(r,20));
+  const out = JSON.parse(py.runPython(`import tierra.api as a\na.barrido(${JSON.stringify(JSON.stringify(leerDatos()))}, 30)`));
+  if(out.error){ cont.innerHTML = `<div class="warn">${esc(out.error)}</div>`; return; }
+  const r = ultimo;
+  const p = out.primer_n_que_cumple;
+  let h = p ? `<p><b>Primera malla que cumple con geometría válida: ${p} × ${p} conductores.</b> Es una guía: confirma con el criterio de diseño y los demás datos.</p>`
+            : `<p><b>Ninguna configuración cuadrada n × n (3 a 30) cumple con geometría válida.</b> Considera varillas, mayor área o capa superficial más resistiva.</p>`;
+  h += grafico(out.filas, r);
+  h += `<table><tr><th class="n">n × n</th><th class="n">Rg [Ω]</th><th class="n">Em [V]</th><th class="n">Es [V]</th><th>Estado</th></tr>${out.filas.map(f=>`<tr><td class="n">${f.n_conductores}</td><td class="n">${fmt(f.rg,3)}</td><td class="n">${fmt(f.em,0)}</td><td class="n">${fmt(f.es,0)}</td><td>${f.cumple?'<span class="tag ok">cumple</span>':'<span class="tag bad">no cumple</span>'}${f.valida?"":' <span class="hint">(D ≤ 2.5 m: fuera de validez)</span>'}</td></tr>`).join("")}</table>`;
+  cont.innerHTML = h;
+}
+
+function descargar(nombre, texto, tipo){
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(new Blob([texto], {type: tipo+";charset=utf-8"}));
+  a.download = nombre; document.body.appendChild(a); a.click(); a.remove();
+}
+
+async function calcular(){
+  if(!py) return;
+  $("btnCalc").disabled = true; $("estado").textContent = "Calculando…";
+  await new Promise(r=>setTimeout(r,20));
+  try{
+    const out = JSON.parse(py.runPython(`import tierra.api as a\na.calcular(${JSON.stringify(JSON.stringify(leerDatos()))})`));
+    if(out.error){
+      $("resultados").innerHTML = `<div class="card"><h2>No se pudo calcular</h2><div class="warn">${esc(out.error)}</div></div>`;
+      $("estado").textContent = "";
+    } else { ultimo = out; pintarResultados(out); $("estado").textContent = ""; }
+  } catch(e){ $("estado").textContent = "Error inesperado: " + e; }
+  $("btnCalc").disabled = false;
+}
+
+async function iniciar(){
+  pintarCampos();
+  try{
+    py = await loadPyodide();
+    py.FS.mkdir("/tierra_pkg"); py.FS.mkdir("/tierra_pkg/tierra");
+    for(const [n, t] of Object.entries(FUENTES)) py.FS.writeFile("/tierra_pkg/tierra/"+n, t);
+    py.runPython("import sys; sys.path.insert(0, '/tierra_pkg')");
+    $("cargando").style.display = "none";
+    calcular();
+  } catch(e){
+    $("cargando").innerHTML = "<div>No se pudo cargar el motor de cálculo.</div><div class='hint'>Revisa tu conexión a internet y recarga la página. Detalle: " + esc(e) + "</div>";
+  }
+}
+$("btnCalc").onclick = calcular;
+$("btnEj").onclick = () => { escribirDatos(JSON.parse(py.runPython("import tierra.api as a\na.ejemplo()"))); calcular(); };
+$("btnGuardar").onclick = () => descargar("datos_malla.json", JSON.stringify(leerDatos(), null, 2), "application/json");
+$("btnAbrir").onclick = () => $("archivo").click();
+$("archivo").onchange = async e => { const f = e.target.files[0]; if(!f) return; try{ escribirDatos(JSON.parse(await f.text())); calcular(); }catch(err){ $("estado").textContent = "Archivo no válido: " + err; } e.target.value = ""; };
+iniciar();
+</script>
+</body>
+</html>

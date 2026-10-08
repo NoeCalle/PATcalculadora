@@ -1,0 +1,42 @@
+{
+  "proyecto": "Ejemplo didactico: misma malla sin varillas y Sf = 1 (no cumple)",
+  "suelo": {
+    "rho": 400.0
+  },
+  "capa_superficial": {
+    "rho_s": 2500.0,
+    "hs": 0.102
+  },
+  "falla": {
+    "i_falla_ka": 3.18,
+    "sf": 1.0,
+    "x_r": 10.0,
+    "frecuencia": 60.0,
+    "tf": 0.5,
+    "cp": 1.0
+  },
+  "descarga": {
+    "ts": 0.5,
+    "peso": 70
+  },
+  "conductor": {
+    "material": "cobre_duro",
+    "ta": 40.0,
+    "union": "soldadura_exotermica",
+    "diametro_mm": 10.0
+  },
+  "malla": {
+    "lx": 70.0,
+    "ly": 70.0,
+    "nx": 11,
+    "ny": 11,
+    "h": 0.5,
+    "varillas": {
+      "cantidad": 0,
+      "largo": 7.5,
+      "diametro_mm": 16.0,
+      "en_perimetro": true
+    }
+  },
+  "metodo_rg": "sverak"
+}
