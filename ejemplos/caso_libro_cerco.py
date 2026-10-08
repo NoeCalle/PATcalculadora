@@ -18,6 +18,7 @@ que la formula de Cs no cubre.
 Ejecutar:  python ejemplos/caso_libro_cerco.py
 """
 
+import math
 import os
 import sys
 
@@ -67,6 +68,66 @@ def limites():
     return {"cs_grava": cs_g, "toque_grava": toque_g, "paso_grava": paso_g,
             "toque_suelo": toque_s, "paso_suelo": paso_s,
             "metal_metal": pot.tolerable_metal_metal(TS, PESO)}
+
+
+def peor_paso_exterior(esc, grava, cerco, eps=0.02, res=0.25, paso_pies=1.0):
+    """Peor tension de paso en el exterior, buscando por el perimetro de la grava.
+
+    El maximo no esta en la linea central sino junto al borde de la grava y en las
+    esquinas, donde el gradiente es mayor. Se barre una banda alrededor de ese
+    borde, con las esquinas en detalle, y se evalua en 24 direcciones por punto.
+
+    grava, cerco: rectangulos (x0, y0, ancho, alto).
+    Devuelve dict con el peor caso de cada clase de superficie.
+    """
+    gx0, gy0, gw, gh = grava
+    gx1, gy1 = gx0 + gw, gy0 + gh
+    dirs = [(math.cos(math.radians(a)), math.sin(math.radians(a))) for a in range(0, 360, 15)]
+
+    cand = []
+    # banda a ambos lados del borde de la grava
+    for t in (-eps, eps, -0.3, 0.3, -1.0, 1.0):
+        n_x = int(gw / res) + 1
+        n_y = int(gh / res) + 1
+        for i in range(n_x):
+            x = gx0 + res * i
+            cand += [(x, gy0 - t), (x, gy1 + t)]
+        for j in range(n_y):
+            y = gy0 + res * j
+            cand += [(gx0 - t, y), (gx1 + t, y)]
+    # esquinas con detalle angular
+    for (cx, cy) in ((gx0, gy0), (gx1, gy0), (gx1, gy1), (gx0, gy1)):
+        for a in range(0, 360, 5):
+            dx, dy = math.cos(math.radians(a)), math.sin(math.radians(a))
+            for r in (eps, 0.1, 0.3, 0.6, 1.0):
+                cand.append((cx + dx * r, cy + dy * r))
+
+    pares = []
+    for p in cand:
+        if dentro(cerco, *p):
+            continue
+        for (dx, dy) in dirs:
+            q = (p[0] + dx * paso_pies, p[1] + dy * paso_pies)
+            if dentro(cerco, *q):
+                continue
+            pares.append((p, q))
+    pts = sorted({p for par in pares for p in par})
+    V = dict(zip(pts, esc.potenciales(pts, bloque=512)))
+
+    peores = {"grava": (-1.0, None, None), "suelo": (-1.0, None, None),
+              "mixto": (-1.0, None, None)}
+    for (p, q) in pares:
+        e = abs(V[p] - V[q])
+        g1, g2 = dentro(grava, *p), dentro(grava, *q)
+        clave = "grava" if (g1 and g2) else ("suelo" if not (g1 or g2) else "mixto")
+        if e > peores[clave][0]:
+            peores[clave] = (e, p, q)
+    return peores
+
+
+def dentro(rect, x, y, eps=1e-9):
+    x0, y0, w, h = rect
+    return (x0 - eps) <= x <= (x0 + w + eps) and (y0 - eps) <= y <= (y0 + h + eps)
 
 
 def _hacia_fuera(p, centro, retiro):
@@ -176,7 +237,10 @@ def main():
     print()
     print("  'Rg man.' es la del manual; 'Rg Sver.' la que recalcula esta herramienta con la")
     print("  misma formula (coinciden); 'Rg mod.' la del modelo de potencial. k = GPR man./GPR mod.")
-    print("  Em y Es son del metodo simplificado y describen solo el INTERIOR de la malla.")
+    print("  Em es la tension de malla: toque en el INTERIOR. Es es la estimacion de paso del")
+    print("  metodo simplificado y NO se limita al interior: el paso puede alcanzar su maximo")
+    print("  fuera del perimetro. Se conservan separadas la estimacion simplificada (Em, Es) y")
+    print("  la evaluacion por perfiles de las secciones siguientes.")
     print()
 
     print("2) TOQUE EN CERCO Y PUERTA  [3.2.1, 3.3.1, 5.5, 6.3.1, 6.5.1, 7.5]")
@@ -198,7 +262,7 @@ def main():
     print("  hasta 7.5 m del cerco, asi que para las demas se dan ambos cocientes.")
     print()
 
-    print("3) PASO, CLASIFICADO POR LA SUPERFICIE DE CADA APOYO")
+    print("3) PASO EN LA LINEA CENTRAL - COTA INFERIOR, NO EL MAXIMO")
     print(L)
     print(f"{'Geometria':22} {'ambos grava':>12} {'/1899':>7} {'ambos suelo':>12} {'/263':>7} "
           f"{'a caballo':>10} {'dist.':>7}")
@@ -207,13 +271,17 @@ def main():
         print(f"{r['nombre']:22} {pg[0]:12.1f} {pg[0]/lim['paso_grava']:7.3f} "
               f"{ps[0]:12.1f} {ps[0]/lim['paso_suelo']:7.3f} {pm[0]:10.1f} {pm[1]:7.1f}")
     print()
-    print("  Recorrido: linea x = centro de la malla, desde el centro hasta 30 m al sur del")
-    print("  cerco, con los dos apoyos separados 1 m en la direccion de la linea.")
+    print("  ATENCION: estas cifras corresponden a UN recorrido, la linea x = centro de la")
+    print("  malla hacia el sur, con los apoyos separados 1 m. NO son el maximo exterior:")
+    print("  el gradiente es mayor en las esquinas y junto al borde de la grava. Sirven como")
+    print("  cota inferior y para comparar geometrias entre si. El maximo real se busca")
+    print("  barriendo el exterior (seccion 4 para G2, y ejemplos/caso_libro_paso_exterior.py).")
     print("  'ambos grava': los dos apoyos dentro de los 7.5 m de grava.")
     print("  'ambos suelo': los dos apoyos mas alla del borde de la grava.")
     print("  'a caballo'  : un apoyo sobre grava y el otro sobre suelo expuesto. La formula")
-    print("                 de Cs supone los dos pies sobre la misma superficie, por lo que")
-    print("                 este caso NO tiene limite aplicable; se informa sin cociente.")
+    print("                 de Cs supone los dos pies sobre la misma superficie, asi que este")
+    print("                 caso requiere un criterio especifico para apoyos sobre superficies")
+    print("                 distintas; queda como comprobacion ABIERTA, no como cumplimiento.")
     print()
 
     print("4) PERFIL SALIENDO DEL CERCO - G2 CON GRAVA EXTENDIDA  [6.3.1]")
@@ -242,6 +310,39 @@ def main():
     print("  comprobacion que gobierna es el paso.")
     print()
 
+    print("4b) MAXIMO DE PASO EN EL EXTERIOR DE G2 - BARRIDO DEL BORDE DE LA GRAVA")
+    print(L)
+    r_g2 = filas[-1]
+    grava_rect = (-5.0 - 2.0, -5.0 - 2.0, 30.0 + 4.0, 40.0 + 4.0)   # 2 m mas alla de G2
+    cerco_rect = (0.5, 0.5, 19.0, 29.0)
+    peores = peor_paso_exterior(r_g2["escala"], grava_rect, cerco_rect)
+    for clave, etiqueta, limite in (
+            ("grava", "Ambos apoyos sobre grava", lim["paso_grava"]),
+            ("suelo", "Ambos apoyos sobre suelo expuesto", lim["paso_suelo"]),
+            ("mixto", "Apoyos sobre superficies distintas", None)):
+        e, p1, p2 = peores[clave]
+        if limite is not None:
+            print(f"  {etiqueta:36} {e:8.1f} V / {limite:8.1f} V = {e/limite:.3f}   "
+                  f"{'cumple' if e <= limite else 'NO CUMPLE'}")
+        else:
+            print(f"  {etiqueta:36} {e:8.1f} V   requiere un criterio especifico para")
+            print(f"  {'':36}            apoyos sobre superficies distintas:")
+            print(f"  {'':36}            COMPROBACION ABIERTA")
+        print(f"  {'':36} apoyos en ({p1[0]:.2f}, {p1[1]:.2f}) y ({p2[0]:.2f}, {p2[1]:.2f})")
+    print()
+    print("  El maximo con ambos apoyos sobre suelo aparece a pocos centimetros del borde de")
+    print("  la grava, en las cuatro esquinas por simetria, y SUPERA el limite. La cobertura de")
+    print("  grava de 2 m mas alla del borde de la malla no basta para esa comprobacion.")
+    print("  Al refinar la discretizacion el valor se estabiliza (288.5, 287.7 y 287.4 V con")
+    print("  832, 1664 y 3328 subsegmentos), asi que no es un artefacto numerico.")
+    print()
+    print("  Extension de grava necesaria (peor paso con ambos apoyos justo fuera de ella):")
+    print("    2.0 m -> 289.6 V / 263.4 = 1.099   NO cumple   (cobertura actual)")
+    print("    2.5 m -> 252.3 V / 263.4 = 0.958   cumple, con poco margen")
+    print("    3.0 m -> 223.9 V / 263.4 = 0.850   cumple")
+    print("  Reproducible con ejemplos/caso_libro_paso_exterior.py")
+    print()
+
     print("5) CONEXIONES DE BT: 43 kA, 0.20 s, X/R = 3  [5.2, 5.5, 6.5]")
     print(L)
     df_bt = falla.factor_decremento(0.20, 3.0, 60.0)
@@ -263,8 +364,8 @@ def main():
     tabla = [
         ("Toque interior (Em, metodo simplificado)", r["em"], lim["toque_grava"], "V"),
         ("Toque junto al cerco y en la puerta", peor_toque, lim["toque_grava"], "V"),
-        ("Paso, ambos apoyos sobre grava", r["paso_grava"][0], lim["paso_grava"], "V"),
-        ("Paso, ambos apoyos sobre suelo expuesto", r["paso_suelo"][0], lim["paso_suelo"], "V"),
+        ("Paso exterior, ambos apoyos sobre grava", peores["grava"][0], lim["paso_grava"], "V"),
+        ("Paso exterior, ambos apoyos sobre suelo", peores["suelo"][0], lim["paso_suelo"], "V"),
         ("Enlace de BT (120 mm2 adoptados)", a_bt, 120.0, "mm2"),
     ]
     print(f"{'Comprobacion':44} {'Resultado':>11} {'Limite':>9} {'Cociente':>9} {'Veredicto':>11}")
@@ -273,8 +374,13 @@ def main():
         print(f"{nombre:44} {val:9.1f} {u:>2} {lim_v:9.1f} {coc:9.3f} "
               f"{'cumple' if coc <= 1 else 'NO cumple':>11}")
     print()
-    print(f"  Caso a caballo del borde de la grava: {r['paso_mixto'][0]:.1f} V a "
-          f"{r['paso_mixto'][1]:.1f} m del cerco, sin limite aplicable (ver seccion 3).")
+    print(f"  Las dos filas de paso vienen del barrido de la seccion 4b, no de la linea central.")
+    print(f"  ABIERTO - apoyos sobre superficies distintas: {peores['mixto'][0]:.1f} V en el borde")
+    print("  de la grava. Requiere un criterio especifico para apoyos sobre superficies")
+    print("  distintas; la resistencia de contacto de los pies forma parte de la evaluacion y")
+    print("  la grava la modifica, asi que no procede aplicarle ninguno de los dos limites.")
+    print("  ABIERTO - el paso exterior sobre suelo expuesto NO cumple con la grava actual de")
+    print("  2 m; con 2.5 m cumple con poco margen y con 3.0 m con margen razonable.")
     print("  Metal-metal: el limite de "
           f"{lim['metal_metal']:.1f} V no se aplica al toque de la puerta de arriba, sino a la")
     print("  DIFERENCIA de potencial entre dos partes metalicas que la persona toque a la vez")

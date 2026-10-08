@@ -107,9 +107,19 @@ El modelo resuelve su propia resistencia, menor que la de Sverak. Si el resto de
 
 Así se cumple siempre `V_escalado(P) + E_toque(P) = GPR_adoptado`. Hay pruebas que lo verifican punto a punto, porque mezclar las escalas fue un error real de una versión anterior del informe del caso.
 
+### Lo que la normalización NO valida
+
+El factor k ajusta la **amplitud** del perfil al GPR adoptado. No valida la **forma** del perfil: que el modelo represente correctamente el terreno depende de sus hipótesis (suelo uniforme, modelo resistivo), no del escalado. Un perfil con forma equivocada escalado al GPR correcto sigue siendo un perfil equivocado. El contraste con CYMGRD respalda la solución de reparto de corriente, de la que sale tanto Rg como la forma, pero no sustituye una medición de perfil en campo.
+
+### Em y Es frente a la evaluación por perfiles
+
+Em es la tensión de malla: el toque en el interior. **Es no está limitada al interior**: la tensión de paso puede alcanzar su máximo fuera del perímetro, y en el caso del manual así ocurre, junto al borde de la grava. Por eso las dos vías se conservan separadas en los informes: la estimación simplificada (Em, Es) y la evaluación por perfiles, sin que una sustituya a la otra.
+
+Un recorrido único tampoco da el máximo. En el caso del manual, la línea central entrega 253,6 V sobre suelo expuesto, mientras que el barrido del borde de la grava encuentra 288,9 V en las esquinas: un 14 % más, y suficiente para invertir el veredicto. Cualquier cifra de paso exterior debe declarar qué recorrido la produjo.
+
 ### La superficie bajo cada apoyo
 
-La tensión de paso tolerable supone **los dos pies sobre la misma superficie**: el factor Cs vale para una capa superficial continua bajo ambos apoyos. En el borde de la grava hay un tramo de un metro donde un pie queda sobre grava y el otro sobre suelo expuesto. Ese caso no tiene límite aplicable con la fórmula de Cs; `ejemplos/caso_libro_cerco.py` lo informa aparte, sin cociente, en lugar de compararlo contra uno de los dos límites.
+La tensión de paso tolerable supone **los dos pies sobre la misma superficie**: el factor Cs vale para una capa superficial continua bajo ambos apoyos. En el borde de la grava hay un tramo de un metro donde un pie queda sobre grava y el otro sobre suelo expuesto. La resistencia de contacto de los pies forma parte de la evaluación y la grava la modifica, así que ese caso **requiere un criterio específico para apoyos sobre superficies distintas**: no procede aplicarle ninguno de los dos límites. `ejemplos/caso_libro_cerco.py` lo informa aparte y lo marca como comprobación **abierta**, no como cumplimiento.
 
 ### Lo que este modelo no hace
 
@@ -117,7 +127,8 @@ La tensión de paso tolerable supone **los dos pies sobre la misma superficie**:
 - Modelo resistivo: no incluye el acoplamiento inductivo ni la impedancia longitudinal del conductor.
 - No sustituye al método simplificado en el interior de la malla. Em y Es siguen gobernando esa comprobación; el modelo cubre las posiciones que el método no alcanza.
 - La tensión metal-metal entre dos partes metálicas distintas (hoja de puerta y marco, por ejemplo) depende del detalle de su unión y queda fuera del modelo.
-- El caso de un pie sobre grava y el otro sobre suelo expuesto: se informa, pero la norma no da un límite para él.
+- El caso de un pie sobre grava y el otro sobre suelo expuesto: se informa, pero requiere un criterio específico que la fórmula de Cs no cubre.
+- La forma del perfil no está contrastada contra ninguna medición de campo ni contra un perfil publicado.
 
 ## Qué sigue sin validar externamente
 

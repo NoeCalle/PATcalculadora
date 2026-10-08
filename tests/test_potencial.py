@@ -270,3 +270,49 @@ def test_gpr_adoptado_invalido(modelo_g2):
     for malo in (0.0, -100.0):
         with pytest.raises(ValueError):
             mod.en_escala(malo)
+
+
+# ---------------- hallazgos del caso del manual que conviene fijar ----------------
+def _esc_g2():
+    from tierra import falla
+    df = falla.factor_decremento(0.70, 10.0, 60.0)
+    ig = 5000.0 * 0.472 * df
+    m = Malla.rectangular(30, 40, 17, 13, 0.50, 0.0105, n_varillas=4, l_varilla=3.0)
+    mod = pot.modelo_de_malla(m, 150.0, ig, x0=-5.0, y0=-5.0)
+    return mod.en_escala(ig * 2.02)
+
+
+def test_el_paso_sobre_suelo_expuesto_supera_el_limite_junto_a_la_grava():
+    """Hallazgo del caso: con grava hasta 2 m del borde de la malla, el paso con
+    ambos apoyos justo fuera de ella supera el limite de suelo expuesto. El
+    maximo esta en las esquinas, no en la linea central."""
+    from tierra import tolerables
+    esc = _esc_g2()
+    _, paso_suelo, _ = tolerables.tensiones_tolerables(150.0, 0.70, 50)
+    # esquina suroeste de la grava en (-7, -7); ambos apoyos fuera, radialmente
+    e = esc.paso((-4.05, -7.02), (-4.05, -8.02))
+    assert e > paso_suelo
+    assert e == pytest.approx(275.0, rel=0.05)
+
+
+def test_extender_la_grava_a_tres_metros_resuelve_el_paso_exterior():
+    from tierra import tolerables
+    esc = _esc_g2()
+    _, paso_suelo, _ = tolerables.tensiones_tolerables(150.0, 0.70, 50)
+    # con grava hasta 3 m del borde, el borde pasa a y = -8
+    e = esc.paso((-4.05, -8.02), (-4.05, -9.02))
+    assert e < paso_suelo
+
+
+def test_la_linea_central_subestima_el_paso_exterior():
+    """Por eso el informe la rotula como cota inferior y no como maximo."""
+    esc = _esc_g2()
+    central = esc.paso((10.0, -7.02), (10.0, -8.02))
+    esquina = esc.paso((-4.05, -7.02), (-4.05, -8.02))
+    assert esquina > central
+
+
+def test_el_paso_decae_al_alejarse_del_borde_de_la_grava():
+    esc = _esc_g2()
+    vals = [esc.paso((-4.05, -7.0 - s), (-4.05, -8.0 - s)) for s in (0.02, 0.5, 2.0, 8.0)]
+    assert vals == sorted(vals, reverse=True)

@@ -272,6 +272,36 @@ class ModeloPotencial:
                 peor = (p["toque"], p["x"], p["y"])
         return peor
 
+    def potenciales(self, puntos, bloque=256):
+        """Potencial [V] en muchos puntos a la vez.
+
+        puntos: secuencia de (x, y) o (x, y, z); z = 0 si se omite.
+        Evalua por bloques para acotar la memoria. Mucho mas rapido que llamar a
+        potencial() punto por punto, lo que permite barrer mallas de miles de
+        posiciones (por ejemplo todo el exterior del recinto).
+        """
+        pts = [(p[0], p[1], p[2] if len(p) > 2 else 0.0) for p in puntos]
+        if _np is None:  # pragma: no cover
+            return [self.potencial(*p) for p in pts]
+        A, B, L, Lp, invL = self._arr
+        u = (B - A) * invL[:, None]
+        ui = (Lp[1] - Lp[0]) * invL[:, None]
+        out = _np.empty(len(pts), dtype=float)
+        P = _np.array(pts, dtype=float)
+        for i0 in range(0, len(pts), bloque):
+            Pb = P[i0:i0 + bloque]
+            total = None
+            for (Ai, uu) in ((A, u), (Lp[0], ui)):
+                w = Pb[:, None, :] - Ai[None, :, :]
+                t0 = (w * uu[None, :, :]).sum(axis=2)
+                d2 = (w * w).sum(axis=2) - t0 * t0
+                d = _np.sqrt(_np.maximum(d2, self.a * self.a))
+                val = _np.arcsinh((L[None, :] - t0) / d) + _np.arcsinh(t0 / d)
+                total = val if total is None else total + val
+            coef = self.rho * total * invL[None, :] / (4.0 * math.pi)
+            out[i0:i0 + bloque] = coef @ _np.asarray(self.corrientes)
+        return out
+
     def en_escala(self, gpr_adoptado):
         """Devuelve los resultados en la escala de otro GPR (ver PerfilEscalado).
 
@@ -359,6 +389,11 @@ class PerfilEscalado:
 
     def potencial(self, px, py, pz=0.0):
         return self.modelo.potencial(px, py, pz) * self.factor
+
+    def potenciales(self, puntos, bloque=256):
+        """Potencial [V] de muchos puntos, ya en la escala adoptada."""
+        f = self.factor
+        return [float(v) * f for v in self.modelo.potenciales(puntos, bloque)]
 
     def toque(self, px, py):
         return self.gpr - self.potencial(px, py, 0.0)
