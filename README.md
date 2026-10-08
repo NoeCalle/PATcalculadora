@@ -55,7 +55,32 @@ python -m pytest
 | `materiales.py` | Constantes de 13 materiales (cobre, aluminio, aceros recubiertos, etc.) |
 | `tolerables.py` | Factor Cs y tensiones tolerables de paso y contacto (50 y 70 kg) |
 | `malla.py` | Rg (Sverak y Schwarz), n, Ki, Kii, Kh, Km, Ks, LM, Ls, Em, Es y avisos de validez |
+| `potencial.py` | Perfil de potencial superficial, toque en cerco y puerta, paso en cualquier punto |
 | `diseno.py` | Flujo completo, verificaciones, barrido de conductores y memoria de cálculo |
+
+## Toque en el cerco y en la puerta
+
+El método simplificado de IEEE 80 describe el **interior** de la malla: Em y Es no sirven para el cerco, la puerta ni el suelo exterior, porque esas posiciones necesitan el potencial de la superficie donde la persona apoya los pies.
+
+`potencial.py` lo calcula. Divide la malla en segmentos, resuelve el reparto de corriente de fuga que los mantiene equipotenciales y con esa solución evalúa el potencial de cualquier punto:
+
+```python
+from tierra import potencial as pot
+from tierra.malla import Malla
+
+m = Malla.rectangular(30, 40, 17, 13, h=0.50, d=0.0105, n_varillas=4, l_varilla=3.0)
+mod = pot.modelo_de_malla(m, rho=150, ig=2405, x0=-5, y0=-5)
+
+mod.rg                              # resistencia que entrega el modelo
+mod.toque(0.5, 0.5)                 # toque en un punto del cerco
+mod.paso((10, -8), (10, -9))        # paso entre dos apoyos
+mod.toque_maximo((0.5, 0.5), (19.5, 0.5))   # peor punto de un lado del cerco
+mod.perfil((10, 0.5), (10, -15))    # perfil para graficar
+```
+
+`ejemplos/caso_libro_cerco.py` es un caso completo resuelto: ocho geometrías, toque en cerco y puerta, perfil hacia el exterior y comprobación térmica de las conexiones.
+
+A diferencia de Sverak, este modelo resuelve el problema numéricamente, así que su Rg se parece a la de un programa comercial. Coincide con CYMGRD dentro del 2 % en los tres ejemplos del Anexo B de IEEE 80.
 
 ## Validación
 

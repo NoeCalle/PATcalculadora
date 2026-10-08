@@ -24,6 +24,8 @@ class Malla:
     l_varilla: float = 0.0  # longitud de cada varilla [m]
     d_varilla: float = 0.016  # diametro de varilla [m]
     varillas_perimetro: bool = True  # varillas en esquinas/perimetro
+    nx_cond: int = 0  # conductores paralelos a x (0 = geometria no rectangular)
+    ny_cond: int = 0  # conductores paralelos a y
 
     # ---- constructores -------------------------------------------------
     @classmethod
@@ -51,6 +53,8 @@ class Malla:
             l_varilla=l_varilla,
             d_varilla=d_varilla,
             varillas_perimetro=varillas_perimetro,
+            nx_cond=nx,
+            ny_cond=ny,
         )
 
     def __post_init__(self):

@@ -60,6 +60,49 @@ Las dos diferencias aparentes tienen explicación comprobada:
 
 El número de varillas del ejemplo 2 no está publicado. La cifra de 2,75 Ω acota el número a unas 20-25 varillas; con 38 o 40 el calculador daría 2,73-2,74 Ω.
 
+## Caso D — El modelo de potencial superficial frente a CYMGRD
+
+`tierra.potencial` no usa la fórmula cerrada de Sverak: resuelve el reparto de corriente de fuga que mantiene equipotencial a la malla, igual que hace un programa comercial. Por eso su Rg debe parecerse a la de un programa numérico y **no** a la de Sverak.
+
+El documento *CYMGRD IEEE Validation Cases* tabula las dos cifras para los ejemplos 1 a 3 del Anexo B de IEEE 80. Es el único contraste disponible contra un programa comercial:
+
+| Caso | IEEE 80 (Sverak) | CYMGRD | Este modelo | Diferencia vs CYMGRD |
+|---|---:|---:|---:|---:|
+| Ej.1 — 70 × 70 m sin varillas | 2,78 Ω | 2,675 Ω | 2,643 Ω | −1,2 % |
+| Ej.2 — 70 × 70 m + 20 varillas de 7,5 m | 2,75 Ω | 2,500 Ω | 2,498 Ω | −0,1 % |
+| Ej.3 — 63 × 84 m + 38 varillas de 10 m | 2,62 Ω | 2,278 Ω | 2,231 Ω | −2,1 % |
+
+El modelo reproduce a CYMGRD dentro del 2 % en los tres casos, y recoge el mismo patrón: la fórmula cerrada de Sverak queda del lado conservador, entre un 4 % y un 15 % por encima. Esa diferencia es del método, no un error de ninguna de las dos partes.
+
+Comprobaciones internas, automatizadas en `tests/test_potencial.py`:
+
+- La suma de las corrientes de fuga reproduce IG exactamente.
+- Todos los subsegmentos quedan al mismo potencial (dispersión menor que 10⁻⁶ del GPR): la condición física que se impuso se cumple.
+- El potencial decae con la distancia y en ningún punto de la superficie supera el potencial del cobre.
+- La tensión de toque en la malla de esquina coincide con Em de IEEE 80 dentro del 15 %, pese a venir de métodos distintos.
+- Desplazar el origen de coordenadas no altera ningún resultado.
+
+### Convergencia
+
+El perfil de potencial varía en la escala del espaciamiento entre conductores, así que la subdivisión tiene que ser fina frente a él. Los conductores se parten en sus cruces; si no, el refinado oscila en lugar de converger. Caso G2 (30 × 40 m, trama de 2,5 m), toque máximo en el cerco:
+
+| Subsegmento | Subsegmentos | Rg | Toque en el cerco |
+|---|---:|---:|---:|
+| 2,50 m | 416 | 1,857 Ω | 175,0 V |
+| 1,25 m | 832 | 1,863 Ω | 193,7 V |
+| 0,83 m | 1248 | 1,864 Ω | 196,5 V |
+| 0,63 m | 1664 | 1,865 Ω | 197,8 V |
+| 0,42 m | 2496 | 1,865 Ω | 199,0 V |
+
+Por omisión los subsegmentos miden un cuarto del espaciamiento, que deja el resultado a ~1 % del valor convergido.
+
+### Lo que este modelo no hace
+
+- Suelo uniforme: no representa dos capas ni heterogeneidad lateral.
+- Modelo resistivo: no incluye el acoplamiento inductivo ni la impedancia longitudinal del conductor.
+- No sustituye al método simplificado en el interior de la malla. Em y Es siguen gobernando esa comprobación; el modelo cubre las posiciones que el método no alcanza.
+- La tensión metal-metal entre dos partes metálicas distintas (hoja de puerta y marco, por ejemplo) depende del detalle de su unión y queda fuera del modelo.
+
 ## Qué sigue sin validar externamente
 
 1. **El factor Kii** (`1/(2n)^(2/n)`), que solo actúa en mallas **sin** varillas. El único caso externo completo (A) lleva varillas perimetrales, donde Kii = 1 por definición. Para el caso B el motor da Kii = 0,5701, Km = 0,8896, Em = 1001,6 V y Es = 609,7 V, pero no se encontró fuente publicada con esos intermedios. Están registrados en una prueba para que cualquier cambio futuro sea deliberado, no como validación.
@@ -67,6 +110,7 @@ El número de varillas del ejemplo 2 no está publicado. La cifra de 2,75 Ω aco
 3. **El factor de decremento Df**, comparado con una tabla publicada de la norma pero no con un ejemplo resuelto completo.
 4. **Las ecuaciones de Schwarz** para Rg. Se usan solo como comprobación cruzada de Sverak; sus coeficientes k1 y k2 se interpolan entre las profundidades publicadas.
 5. **El modelo de suelo de dos capas**, validado únicamente contra sus propios límites analíticos (a ≪ h → ρ1, a ≫ h → ρ2) y recuperando parámetros de curvas sintéticas.
+6. **Las tensiones de toque y de paso del modelo de potencial** en sí mismas. Lo validado es su Rg contra CYMGRD, que depende de la misma solución de reparto de corriente, más su coherencia con Em. No se encontró ninguna fuente que publique un perfil de potencial con sus valores numéricos.
 
 ## Cómo cerrar los puntos pendientes
 
